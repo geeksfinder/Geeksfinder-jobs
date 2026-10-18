@@ -52,6 +52,28 @@ describe("writer fallback", () => {
   });
 });
 
+describe("skipping a failing writer", () => {
+  beforeEach(() => vi.resetModules());
+  afterEach(() => vi.unstubAllGlobals());
+  it("stops trying a no-credit writer after two failures in one run", async () => {
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.ARTICLE_PROVIDER;
+    process.env.OPENAI_API_KEY = "sk-test-not-real";
+    process.env.GEMINI_API_KEY = "g";
+    const f = vi.fn(async () => new Response(JSON.stringify({ error: { message: "no credits" } }), { status: 429 }));
+    vi.stubGlobal("fetch", f);
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.doMock("@/lib/ai", async (orig) => ({ ...(await orig<typeof import("@/lib/ai")>()), generateJSON: vi.fn().mockResolvedValue(good) }));
+    const { writeArticle, providerChain } = await import("@/lib/articles");
+    for (let i = 0; i < 4; i++) expect(await writeArticle(cluster)).toEqual(good);
+    expect(f).toHaveBeenCalledTimes(2);
+    expect(providerChain()).toEqual(["gemini"]);
+    vi.doUnmock("@/lib/ai");
+    delete process.env.GEMINI_API_KEY;
+  });
+});
+
 describe("blog writer provider", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -118,5 +140,11 @@ describe("article checker", () => {
     const facts = ["Naukri JobSpeak Index rose 2% in September", "IIT Roorkee hosted recruiters from Tata Consultancy Services"];
     const text = "Recruiters went to IIT Roorkee. As the season opened, the Naukri JobSpeak Index Data showed growth. Hiring rose at Tata Consultancy Services and at Infosys Limited. Students learn Node.js daily.";
     expect(unsupportedClaims(text, facts)).toEqual(['name "Infosys Limited"']);
+  });
+
+  it("treats degree, branch and tool names as general words, not claims", async () => {
+    const { unsupportedClaims } = await import("@/lib/article-checks");
+    const text = "If you study a B.Tech CSE or Computer Applications course, learn Power BI. Recruiters at Infosys Limited may ask.";
+    expect(unsupportedClaims(text, ["Fresher jobs grew"])).toEqual(['name "Infosys Limited"']);
   });
 });

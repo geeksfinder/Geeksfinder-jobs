@@ -154,7 +154,9 @@ async function extractFacts(clusterId: string): Promise<{ facts: Fact[]; sources
   const facts: Fact[] = [];
   for (const it of items ?? []) {
     try {
-      const r = await generateJSON<{ facts: string[] }>(`List the verifiable facts in this news article as short standalone sentences: who, what, where, when, numbers (CTC, openings, dates), and any direct quotes with the speaker named. No opinions. Return JSON {"facts": string[]} with at most 15 facts.
+      const r = await generateJSON<{ facts: string[] }>(`List the verifiable facts in this news article as short standalone sentences: who, what, where, when, numbers (CTC, openings, dates), and any direct quotes with the speaker named. No opinions.
+Restate every fact in your own plain words — never copy a phrase of more than five words from the article, except inside a direct quote. Keep names and numbers exact.
+Return JSON {"facts": string[]} with at most 15 facts.
 
 ${untrusted("article", `${it.title}\n${it.text}`, 10000)}`);
       for (const f of r.facts ?? []) if (typeof f === "string" && f.length > 10) facts.push({ fact: f.slice(0, 400), source_url: it.url });

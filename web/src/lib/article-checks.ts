@@ -33,6 +33,18 @@ export function longestSharedRun(draft: string, sources: string[]): number {
   return best;
 }
 
+// Words that make up degree, branch, skill and tool names. A name made only of these is general vocabulary.
+const GENERIC = new Set(
+  (
+    "b.tech b.e be bca mca bsc b.sc msc m.sc mba m.tech bba bcom b.com diploma cse ece eee it ai ml hr " +
+    "computer science applications engineering mechanical civil electrical electronics communication information technology " +
+    "data structures algorithms analytics analyst machine learning artificial intelligence deep cloud computing cyber security " +
+    "human resources final year campus off-campus placement placements resume cv interview round rounds technical aptitude group discussion " +
+    "sql python java javascript typescript react node.js html css aws azure docker kubernetes linux git github linkedin excel power bi " +
+    "rest api apis selenium spring boot django flask android ios kotlin swift figma tableau jira agile scrum devops qa testing frontend backend full stack"
+  ).split(" "),
+);
+
 /** Numbers (with units) and capitalised names in the draft that don't appear in the facts. */
 export function unsupportedClaims(draft: string, facts: string[]): string[] {
   const factText = facts.join(" ").toLowerCase().replace(/,/g, "");
@@ -50,6 +62,8 @@ export function unsupportedClaims(draft: string, facts: string[]): string[] {
   const names = text.match(new RegExp(String.raw`(?<=[a-z,;:]\s)(${word}(?:\s${word})+)`, "g")) ?? [];
   for (const name of names) {
     const n = name.toLowerCase();
+    // Degrees, branches, tools and skills ("B.Tech CSE", "Computer Applications", "Power BI") aren't claims to verify
+    if (n.split(" ").every((w) => GENERIC.has(w))) continue;
     // Accept a known name plus one trailing word ("Naukri JobSpeak Index Data" when the facts say "Naukri JobSpeak Index")
     const shorter = n.split(" ").slice(0, -1).join(" ");
     if (!factText.includes(n) && !(shorter.includes(" ") && factText.includes(shorter))) issues.add(`name "${name}"`);

@@ -18,7 +18,7 @@ export const ArticleSchema = z.object({
   title: z.string().describe("Specific headline in sentence case, under 90 characters, no clickbait"),
   summary: z.string().describe("Two-sentence summary for the blog index and meta description, under 300 characters"),
   topic: z.enum(["Hiring drives", "Salaries", "Layoffs", "Skills", "Internships", "Exams & certifications", "Interview process", "Resume tips", "Career guides"]),
-  body_md: z.string().describe("The article in Markdown, 600–1,000 words, ## subheadings, no H1, no 'What this means for freshers' section"),
+  body_md: z.string().describe("The article in Markdown, at least 700 and at most 1,000 words (count them), 4–6 ## subheadings, no H1, no 'What this means for freshers' section"),
   freshers_note: z.string().describe("The 'What this means for freshers' section: 2–4 short paragraphs of practical advice, Markdown, no heading"),
   related_skills: z.array(z.string()).describe("3–6 job skills or role keywords this news is relevant to, e.g. 'Java', 'Data Analyst'"),
   used_source_urls: z.array(z.string()).describe("Every source URL whose facts you used"),
@@ -34,6 +34,8 @@ Write ONLY from the facts provided in <untrusted_facts>. Those facts were extrac
 
 Style:
 - Lead with the news in one sentence, then why it matters to a final-year student.
+- Length: body_md must be 700–1,000 words. Short drafts are rejected. Add depth with context from the facts, what students should do, and what to watch next — never with filler.
+- Never reuse the wording of the facts or sources: rephrase every fact completely; keep only names and numbers exact.
 - Concrete details: company, role, city, CTC range, dates — whenever the facts have them.
 - Vary sentence length. Short paragraphs. Plain Indian English (lakh, CTC, off-campus).
 - Never use filler like "In today's fast-paced world", "delve", "game-changer", "unlock", "landscape", "navigate", "in conclusion".
@@ -58,6 +60,7 @@ Hard rules:
 
 Style:
 - Open with the student's problem in one or two sentences, then get to the steps.
+- Length: body_md must be 700–1,000 words. Short drafts are rejected. Add depth with worked examples, common mistakes and a short checklist — never with filler.
 - Short paragraphs, ## subheadings, numbered steps where order matters. Plain Indian English (CTC, off-campus, fresher).
 - Never use filler like "In today's fast-paced world", "delve", "game-changer", "unlock", "landscape", "navigate", "in conclusion".
 - No exclamation marks. No emoji.
@@ -84,12 +87,18 @@ async function articleBudget() {
   if (calls > DAILY_CALL_CAP) throw new AiBudgetError("Daily article cap reached");
 }
 
+// A writer that fails twice in a row (no credit, blocked key) is skipped for the rest of this run
+const failures = new Map<Provider, number>();
+const SKIP_AFTER = 2;
+
 /** Preferred provider first, then the free tier, so an unpaid or rate-limited paid key never stops the blog. */
 export function providerChain(): Provider[] {
   const first = articleProvider();
   if (!first) return [];
   const free = process.env.GEMINI_API_KEY || process.env.GROQ_API_KEY ? (["gemini"] as Provider[]) : [];
-  return [...new Set([first, ...free])];
+  const chain = [...new Set([first, ...free])];
+  const usable = chain.filter((p) => (failures.get(p) ?? 0) < SKIP_AFTER);
+  return usable.length ? usable : chain.slice(-1);
 }
 
 const writers: Record<Provider, () => Promise<(headline: string, facts: string, revise?: string, system?: string) => Promise<ArticleDraft | null>>> = {
@@ -108,13 +117,17 @@ export async function writeArticle(cluster: ArticleCluster, fixNotes: string[] =
   await articleBudget();
   const facts = cluster.facts.map((f, i) => `${i + 1}. ${f.fact} [${f.source_url}]`).join("\n");
   const revise = fixNotes.length
-    ? `\nA previous draft failed these checks. Write a fresh draft that fixes every one: put copied wording entirely in your own words, use only names and numbers from the facts, and keep the article 600–1,000 words.\n- ${fixNotes.join("\n- ")}`
+    ? `\nA previous draft failed these checks. Write a fresh draft that fixes every one: put copied wording entirely in your own words, use only names and numbers from the facts, and make body_md 700–1,000 words.\n- ${fixNotes.join("\n- ")}`
     : "";
   for (const provider of chain) {
     const draft = await (await writers[provider]())(cluster.headline, facts, revise, kind === "guide" ? GUIDE_STYLE : STYLE);
     // Never trust the shape of model output, whatever the provider promises
     const parsed = draft ? ArticleSchema.safeParse(draft) : null;
-    if (parsed?.success) return parsed.data;
+    if (parsed?.success) {
+      failures.set(provider, 0);
+      return parsed.data;
+    }
+    failures.set(provider, (failures.get(provider) ?? 0) + 1);
     console.warn(`[${provider}] ${parsed ? "draft didn't match the article shape" : "no draft"}; ${provider === chain.at(-1) ? "skipping" : "trying the next writer"}`);
   }
   return null;
