@@ -8,7 +8,9 @@ import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { AiBudgetError, generateJSON, untrusted } from "@/lib/ai";
 import { runChecks } from "@/lib/article-checks";
+import { aiReview, canAutoPublish, seoReview, type AiReview, type SeoResult } from "@/lib/article-review";
 import { GUIDES_PER_DAY, NEWS_PER_DAY, writeArticle, type ArticleDraft, type ArticleKind, type Fact } from "@/lib/articles";
+import { publishDraft } from "@/lib/publish";
 import { safeFetch } from "@/lib/safe-fetch";
 import { adminClient } from "@/lib/supabase/admin";
 
@@ -223,7 +225,28 @@ async function main() {
   }
 }
 
-type Done = { draft: ArticleDraft; checks: ReturnType<typeof runChecks> };
+type Done = { draft: ArticleDraft; checks: ReturnType<typeof runChecks>; seo: SeoResult; review: AiReview | null; gate: { publish: boolean; reasons: string[] } };
+
+// Titles already used (published or drafted in the last 90 days), for the SEO duplicate check
+let knownTitles: string[] | null = null;
+async function existingTitles() {
+  if (knownTitles) return knownTitles;
+  const since = new Date(Date.now() - 90 * 86_400_000).toISOString();
+  const [{ data: a }, { data: d }] = await Promise.all([
+    db.from("articles").select("title").gte("published_at", since),
+    db.from("article_drafts").select("title").gte("created_at", since),
+  ]);
+  knownTitles = [...(a ?? []), ...(d ?? [])].map((r) => r.title as string).filter(Boolean);
+  return knownTitles;
+}
+
+/** All three reviewers on one draft: copy/fact checks, SEO checks, AI editor; then the auto-publish decision. */
+async function reviewDraft(draft: ArticleDraft, factList: string[], sources: string[], kind: ArticleKind): Promise<Done> {
+  const checks = runChecks(draft.body_md, draft.freshers_note, factList, sources);
+  const seo = seoReview(draft, await existingTitles());
+  const review = await aiReview(draft, factList, kind);
+  return { draft, checks, seo, review, gate: canAutoPublish(checks, seo, review) };
+}
 
 async function draftsToday(kind: ArticleKind) {
   const today = new Date(Date.now() + 5.5 * 3_600_000).toISOString().slice(0, 10);
@@ -231,38 +254,55 @@ async function draftsToday(kind: ArticleKind) {
   return count ?? 0;
 }
 
-/** Write, check, and give the writer one rewrite with the checker's notes; keep whichever version has fewer problems. */
+/**
+ * Write and review. If anything fails, one rewrite with every reviewer's notes combined (copy, facts, SEO, AI editor);
+ * keep whichever version has fewer reasons not to publish.
+ */
 async function draftWithRewrite(cluster: { headline: string; facts: Fact[] }, sources: string[], kind: ArticleKind): Promise<Done | null> {
   const factList = cluster.facts.map((f) => f.fact);
-  let draft = await writeArticle(cluster, [], kind);
-  if (!draft) return null;
-  let checks = runChecks(draft.body_md, draft.freshers_note, factList, sources);
-  if (!checks.passed) {
-    const retry = await writeArticle(cluster, checks.notes, kind);
-    const retryChecks = retry ? runChecks(retry.body_md, retry.freshers_note, factList, sources) : null;
-    if (retry && retryChecks && retryChecks.notes.length < checks.notes.length) {
-      draft = retry;
-      checks = retryChecks;
+  const first = await writeArticle(cluster, [], kind);
+  if (!first) return null;
+  let best = await reviewDraft(first, factList, sources, kind);
+  if (!best.gate.publish) {
+    const notes = [...best.checks.notes, ...best.seo.notes, ...(best.review?.issues ?? [])].slice(0, 12);
+    const retry = await writeArticle(cluster, notes, kind);
+    if (retry) {
+      const second = await reviewDraft(retry, factList, sources, kind);
+      if (second.gate.reasons.length < best.gate.reasons.length) best = second;
     }
   }
-  return { draft, checks };
+  return best;
 }
 
-async function saveDraft({ draft, checks }: Done, facts: Fact[], where: { kind: ArticleKind; cluster_id?: string; guide_key?: string }) {
-  const { error } = await db.from("article_drafts").insert({
-    ...where,
-    topic: draft.topic,
-    title: draft.title,
-    summary: draft.summary,
-    facts: { facts, related_skills: draft.related_skills, freshers_note: draft.freshers_note, used_source_urls: draft.used_source_urls },
-    body_md: draft.body_md,
-    overlap_score: checks.overlap,
-    factcheck_passed: checks.factcheck_passed,
-    check_notes: checks.notes,
-    status: "draft",
-  });
-  if (error) return log(`${where.kind}: couldn't save "${draft.title}": ${error.message}`);
-  log(`${where.kind}: drafted "${draft.title}" (${checks.passed ? "checks passed" : `${checks.notes.length} issues`})`);
+/** Save the draft with its review; publish it right away when every check passed. */
+async function saveDraft(done: Done, facts: Fact[], where: { kind: ArticleKind; cluster_id?: string; guide_key?: string }) {
+  const { draft, checks, seo, review, gate } = done;
+  const { data: row, error } = await db
+    .from("article_drafts")
+    .insert({
+      ...where,
+      topic: draft.topic,
+      title: draft.title,
+      summary: draft.summary,
+      facts: { facts, related_skills: draft.related_skills, freshers_note: draft.freshers_note, used_source_urls: draft.used_source_urls },
+      body_md: draft.body_md,
+      overlap_score: checks.overlap,
+      factcheck_passed: checks.factcheck_passed,
+      check_notes: checks.notes,
+      review: { seo_score: seo.score, seo_notes: seo.notes, ai: review, held_because: gate.reasons },
+      status: "draft",
+    })
+    .select("id, kind, cluster_id, title, summary, topic, body_md, facts")
+    .single();
+  if (error || !row) return log(`${where.kind}: couldn't save "${draft.title}": ${error?.message}`);
+  knownTitles?.push(draft.title);
+
+  if (!gate.publish) return log(`${where.kind}: drafted "${draft.title}" — held for review (${gate.reasons.length} reasons)`);
+  // The byline says plainly that automated checks reviewed it, not a person
+  const res = await publishDraft(db, row, "GeeksFinder's automated checks", null);
+  if (!res.ok) return log(`${where.kind}: "${draft.title}" passed every check but couldn't publish: ${res.error}`);
+  await db.from("article_drafts").update({ auto_published: true }).eq("id", row.id);
+  log(`${where.kind}: auto-published "${draft.title}" → ${res.url}`);
 }
 
 type Guide = { key: string; topic: string; title: string; angle: string; skills: string[] };

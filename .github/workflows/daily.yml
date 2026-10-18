@@ -6,11 +6,12 @@ on:
     # Times are UTC; IST = UTC + 5:30.
     - cron: "30 0 * * *"      # 06:00 IST — fetch, dedupe, enrich, match (before the 7:30 alerts)
     - cron: "0 0-17 * * *"    # hourly 05:30–22:30 IST — alerts for users whose alert time is now (alert hours are 5–22)
-    - cron: "15 3,13 * * *"   # 08:45 and 18:45 IST — news → drafts for review
+    - cron: "15 3,13 * * *"   # 08:45 and 18:45 IST — news + guides → reviewed drafts (auto-published when every check passes)
+    - cron: "15 16 * * *"     # 21:45 IST — daily report email to admins
   workflow_dispatch:
     inputs:
       task:
-        description: "ingest | notify | news"
+        description: "ingest | notify | news | report"
         required: true
         default: ingest
 
@@ -58,9 +59,11 @@ jobs:
             "30 0 * * *")    echo "t=ingest" >> "$GITHUB_OUTPUT" ;;
             "0 0-17 * * *")  echo "t=notify" >> "$GITHUB_OUTPUT" ;;
             "15 3,13 * * *") echo "t=news"   >> "$GITHUB_OUTPUT" ;;
+            "15 16 * * *")   echo "t=report" >> "$GITHUB_OUTPUT" ;;
             *)              echo "t=${{ inputs.task }}" >> "$GITHUB_OUTPUT" ;;
           esac
       - name: Run
         run: |
           if [ "${{ steps.task.outputs.t }}" = "news" ]; then npx tsx scripts/news.ts
+          elif [ "${{ steps.task.outputs.t }}" = "report" ]; then npx tsx scripts/report.ts
           else npx tsx scripts/cron.ts "${{ steps.task.outputs.t }}"; fi
