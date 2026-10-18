@@ -44,9 +44,16 @@ export function unsupportedClaims(draft: string, facts: string[]): string[] {
     if (v.length === 1 || /^20[2-3]\d$/.test(v)) continue; // single digits and recent years are fine
     if (!factText.includes(v)) issues.add(`number "${n}"`);
   }
-  // Multi-word capitalised names (companies, people, programmes), not at sentence start
-  const names = text.match(/(?<=[a-z,;:]\s)([A-Z][a-zA-Z&.]+(?:\s[A-Z][a-zA-Z&.]+)+)/g) ?? [];
-  for (const name of names) if (!factText.includes(name.toLowerCase())) issues.add(`name "${name}"`);
+  // Multi-word capitalised names (companies, people, programmes), not at sentence start. A word may contain dots
+  // ("Node.js", "B.Tech") but not end with one, so "...in Roorkee. As" is not read as the name "Roorkee. As".
+  const word = String.raw`[A-Z][a-zA-Z&]*(?:\.[A-Za-z]+)*`;
+  const names = text.match(new RegExp(String.raw`(?<=[a-z,;:]\s)(${word}(?:\s${word})+)`, "g")) ?? [];
+  for (const name of names) {
+    const n = name.toLowerCase();
+    // Accept a known name plus one trailing word ("Naukri JobSpeak Index Data" when the facts say "Naukri JobSpeak Index")
+    const shorter = n.split(" ").slice(0, -1).join(" ");
+    if (!factText.includes(n) && !(shorter.includes(" ") && factText.includes(shorter))) issues.add(`name "${name}"`);
+  }
   return [...issues];
 }
 

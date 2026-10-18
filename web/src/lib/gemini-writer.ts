@@ -9,10 +9,10 @@ import { ArticleSchema, STYLE, type ArticleDraft } from "./articles";
 const { $schema: _drop, ...SHAPE } = z.toJSONSchema(ArticleSchema) as Record<string, unknown>;
 void _drop;
 
-export async function writeWithGemini(headline: string, facts: string): Promise<ArticleDraft | null> {
+export async function writeWithGemini(headline: string, facts: string, revise = ""): Promise<ArticleDraft | null> {
   const prompt = `${STYLE}
 
-Write a GeeksFinder article about: ${JSON.stringify(headline)}.
+Write a GeeksFinder article about: ${JSON.stringify(headline)}.${revise}
 Reply with ONE JSON object only (no Markdown fences, no commentary) matching this JSON Schema; follow each field's description:
 ${JSON.stringify(SHAPE)}
 

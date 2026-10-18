@@ -9,7 +9,7 @@ const MODEL = process.env.CLAUDE_ARTICLE_MODEL ?? "claude-haiku-5-5";
 let client: Anthropic | null = null;
 const anthropic = () => (client ??= new Anthropic());
 
-export async function writeWithClaude(headline: string, facts: string): Promise<ArticleDraft | null> {
+export async function writeWithClaude(headline: string, facts: string, revise = ""): Promise<ArticleDraft | null> {
   try {
     const response = await anthropic().messages.parse({
       model: MODEL,
@@ -19,7 +19,7 @@ export async function writeWithClaude(headline: string, facts: string): Promise<
       messages: [
         {
           role: "user",
-          content: `Write a GeeksFinder article about: ${JSON.stringify(headline)}.
+          content: `Write a GeeksFinder article about: ${JSON.stringify(headline)}.${revise}
 
 ${untrusted("facts", facts, 20000)}`,
         },

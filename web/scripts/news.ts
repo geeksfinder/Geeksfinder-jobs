@@ -5,9 +5,9 @@
  * Nothing auto-publishes.
  */
 import { createHash, randomUUID } from "node:crypto";
-import { generateJSON, untrusted } from "@/lib/ai";
+import { AiBudgetError, generateJSON, untrusted } from "@/lib/ai";
 import { runChecks } from "@/lib/article-checks";
-import { writeArticle, type Fact } from "@/lib/articles";
+import { writeArticle, type ArticleDraft, type Fact } from "@/lib/articles";
 import { safeFetch } from "@/lib/safe-fetch";
 import { adminClient } from "@/lib/supabase/admin";
 
@@ -21,6 +21,11 @@ const decode = (s: string) =>
   s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
 const stripTags = (s: string) => decode(s).replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 const tag = (xml: string, name: string) => xml.match(new RegExp(`<${name}[^>]*>([\\s\\S]*?)</${name}>`, "i"))?.[1] ?? "";
+/** Feeds wrap dates in CDATA or use odd formats; an unreadable date must not drop the whole feed. */
+const rssDate = (raw: string) => {
+  const t = Date.parse(decode(raw).trim());
+  return Number.isNaN(t) ? null : new Date(t).toISOString();
+};
 const host = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return ""; } };
 
 /**
@@ -56,7 +61,7 @@ async function fetchRss(src: { id: string; url: string }): Promise<Item[]> {
       source_id: src.id,
       url,
       title: stripTags(tag(xml, "title")),
-      published_at: tag(xml, "pubDate") ? new Date(tag(xml, "pubDate")).toISOString() : null,
+      published_at: rssDate(tag(xml, "pubDate")),
       text: stripTags(tag(xml, "description")),
       publisher: host(sourceUrl ?? url) || null,
     };
@@ -143,8 +148,9 @@ ${untrusted("news_list", list, 30000)}`);
   return kept;
 }
 
-async function extractFacts(clusterId: string): Promise<{ facts: Fact[]; sources: string[] }> {
-  const { data: items } = await db.from("news_items").select("url, title, text").eq("cluster_id", clusterId);
+async function extractFacts(clusterId: string): Promise<{ facts: Fact[]; sources: string[]; outlets: number }> {
+  const { data: items } = await db.from("news_items").select("url, title, text, publisher").eq("cluster_id", clusterId);
+  const outletOf = new Map((items ?? []).map((i) => [i.url, i.publisher || host(i.url)]));
   const facts: Fact[] = [];
   for (const it of items ?? []) {
     try {
@@ -154,23 +160,58 @@ ${untrusted("article", `${it.title}\n${it.text}`, 10000)}`);
       for (const f of r.facts ?? []) if (typeof f === "string" && f.length > 10) facts.push({ fact: f.slice(0, 400), source_url: it.url });
     } catch (e) { log("facts failed", it.url, (e as Error).message); }
   }
-  return { facts, sources: (items ?? []).map((i) => `${i.title}\n${i.text}`) };
+  // Count outlets by publisher, not link host: Google News links are all news.google.com
+  const outlets = new Set(facts.map((f) => outletOf.get(f.source_url) ?? host(f.source_url))).size;
+  return { facts, sources: (items ?? []).map((i) => `${i.title}\n${i.text}`), outlets };
+}
+
+/** Stories grouped in the last 48 h that never got a draft. The first item's title stands in for the headline. */
+async function unwrittenClusters(): Promise<{ id: string; headline: string }[]> {
+  const since = new Date(Date.now() - 48 * 3_600_000).toISOString();
+  const { data: items } = await db.from("news_items").select("cluster_id, title").not("cluster_id", "is", null).gte("created_at", since).limit(500);
+  const ids = [...new Set((items ?? []).map((i) => i.cluster_id as string))];
+  if (!ids.length) return [];
+  const { data: done } = await db.from("article_drafts").select("cluster_id").in("cluster_id", ids);
+  const drafted = new Set((done ?? []).map((d) => d.cluster_id));
+  return ids.filter((id) => !drafted.has(id)).map((id) => ({ id, headline: (items ?? []).find((i) => i.cluster_id === id)!.title.slice(0, 200) }));
 }
 
 async function main() {
   await fetchAll();
-  const clusters = await cluster();
+  // New stories first, then recent stories whose article failed to write (AI busy, no credit…) for another try
+  const clusters = [...(await cluster()), ...(await unwrittenClusters())];
   const today = new Date(Date.now() + 5.5 * 3_600_000).toISOString().slice(0, 10);
   const { count } = await db.from("article_drafts").select("id", { count: "exact", head: true }).gte("created_at", `${today}T00:00:00+05:30`);
   let budget = MAX_DRAFTS - (count ?? 0);
 
   for (const c of clusters) {
     if (budget <= 0) break;
-    const { facts, sources } = await extractFacts(c.id);
-    if (facts.length < 4 || new Set(facts.map((f) => host(f.source_url))).size < 2) continue;
-    const draft = await writeArticle({ headline: c.headline, facts });
-    if (!draft) continue;
-    const checks = runChecks(draft.body_md, draft.freshers_note, facts.map((f) => f.fact), sources);
+    const { facts, sources, outlets } = await extractFacts(c.id);
+    if (facts.length < 4 || outlets < 2) continue;
+    const cluster = { headline: c.headline, facts };
+    const factList = facts.map((f) => f.fact);
+    let draft: ArticleDraft | null;
+    let checks: ReturnType<typeof runChecks>;
+    try {
+      draft = await writeArticle(cluster);
+      if (!draft) continue;
+      checks = runChecks(draft.body_md, draft.freshers_note, factList, sources);
+      // One automatic rewrite with the checker's notes; keep whichever version has fewer problems
+      if (!checks.passed) {
+        const retry = await writeArticle(cluster, checks.notes);
+        const retryChecks = retry ? runChecks(retry.body_md, retry.freshers_note, factList, sources) : null;
+        if (retry && retryChecks && retryChecks.notes.length < checks.notes.length) {
+          draft = retry;
+          checks = retryChecks;
+        }
+      }
+    } catch (e) {
+      if (e instanceof AiBudgetError) {
+        log("news: daily AI cap reached; the rest wait for the next run");
+        break;
+      }
+      throw e;
+    }
     await db.from("article_drafts").insert({
       cluster_id: c.id,
       topic: draft.topic,

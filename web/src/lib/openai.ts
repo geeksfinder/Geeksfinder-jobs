@@ -15,7 +15,7 @@ void _drop;
 // Reasoning models take reasoning_effort/max_completion_tokens; older chat models reject reasoning_effort
 const isReasoningModel = (m: string) => /^(gpt-5|o\d)/.test(m);
 
-export async function writeWithOpenAI(headline: string, facts: string): Promise<ArticleDraft | null> {
+export async function writeWithOpenAI(headline: string, facts: string, revise = ""): Promise<ArticleDraft | null> {
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
@@ -24,7 +24,7 @@ export async function writeWithOpenAI(headline: string, facts: string): Promise<
       model: MODEL,
       messages: [
         { role: "system", content: STYLE },
-        { role: "user", content: `Write a GeeksFinder article about: ${JSON.stringify(headline)}.\n\n${untrusted("facts", facts, 20000)}` },
+        { role: "user", content: `Write a GeeksFinder article about: ${JSON.stringify(headline)}.${revise}\n\n${untrusted("facts", facts, 20000)}` },
       ],
       response_format: { type: "json_schema", json_schema: { name: "article", strict: true, schema: SCHEMA } },
       max_completion_tokens: 16000,

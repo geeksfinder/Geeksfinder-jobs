@@ -33,6 +33,25 @@ describe("free Gemini writer", () => {
   });
 });
 
+describe("writer fallback", () => {
+  beforeEach(() => vi.resetModules());
+  afterEach(() => vi.unstubAllGlobals());
+  it("falls back to free Gemini when the paid key has no credit", async () => {
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.ARTICLE_PROVIDER;
+    process.env.OPENAI_API_KEY = "sk-test-not-real";
+    process.env.GEMINI_API_KEY = "g";
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: { message: "You have no credits remaining" } }), { status: 429 })));
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.doMock("@/lib/ai", async (orig) => ({ ...(await orig<typeof import("@/lib/ai")>()), generateJSON: vi.fn().mockResolvedValue(good) }));
+    const { writeArticle, providerChain } = await import("@/lib/articles");
+    expect(providerChain()).toEqual(["openai", "gemini"]);
+    expect(await writeArticle(cluster)).toEqual(good);
+    vi.doUnmock("@/lib/ai");
+    delete process.env.GEMINI_API_KEY;
+  });
+});
+
 describe("blog writer provider", () => {
   beforeEach(() => {
     vi.resetModules();
@@ -90,5 +109,14 @@ describe("blog writer provider", () => {
     expect(await writeArticle(cluster)).toBeNull();
     expect(err.mock.calls.flat().join(" ")).not.toContain("sk-test-not-real");
     err.mockRestore();
+  });
+});
+
+describe("article checker", () => {
+  it("doesn't read the end of one sentence and the start of the next as a name", async () => {
+    const { unsupportedClaims } = await import("@/lib/article-checks");
+    const facts = ["Naukri JobSpeak Index rose 2% in September", "IIT Roorkee hosted recruiters from Tata Consultancy Services"];
+    const text = "Recruiters went to IIT Roorkee. As the season opened, the Naukri JobSpeak Index Data showed growth. Hiring rose at Tata Consultancy Services and at Infosys Limited. Students learn Node.js daily.";
+    expect(unsupportedClaims(text, facts)).toEqual(['name "Infosys Limited"']);
   });
 });
