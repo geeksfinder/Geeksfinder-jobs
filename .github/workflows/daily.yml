@@ -42,6 +42,7 @@ jobs:
       BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
       EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
       UNSUBSCRIBE_SECRET: ${{ secrets.UNSUBSCRIBE_SECRET }}   # must match the website, or email unsubscribe links fail
+      JSEARCH_RUNS_PER_DAY: "1"   # the cloud fetches jobs once a day (06:00 IST); each run gets the full daily share of the free quota
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
