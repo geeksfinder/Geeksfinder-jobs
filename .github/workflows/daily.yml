@@ -30,6 +30,7 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      GEMINI_BLOG_API_KEY: ${{ secrets.GEMINI_BLOG_API_KEY }}   # optional, blog only
       GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}

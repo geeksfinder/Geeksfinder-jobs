@@ -177,6 +177,9 @@ async function unwrittenClusters(): Promise<{ id: string; headline: string }[]> 
 }
 
 async function main() {
+  // Optional separate Gemini key just for the blog, so its free quota doesn't compete with job enrichment and
+  // resume tailoring. This script runs in its own process, so swapping the variable here affects only the blog.
+  if (process.env.GEMINI_BLOG_API_KEY) process.env.GEMINI_API_KEY = process.env.GEMINI_BLOG_API_KEY;
   await fetchAll();
   // New stories first, then recent stories whose article failed to write (AI busy, no credit…) for another try
   const clusters = [...(await cluster()), ...(await unwrittenClusters())];
