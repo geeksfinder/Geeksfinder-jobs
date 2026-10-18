@@ -44,6 +44,7 @@ jobs:
       EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
       UNSUBSCRIBE_SECRET: ${{ secrets.UNSUBSCRIBE_SECRET }}   # must match the website, or email unsubscribe links fail
       JSEARCH_RUNS_PER_DAY: "1"   # the cloud fetches jobs once a day (06:00 IST); each run gets the full daily share of the free quota
+      AUTO_PUBLISH: ${{ secrets.AUTO_PUBLISH }}   # optional secret: set it to 0 to stop blog auto-publishing (drafts then wait for review)
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
