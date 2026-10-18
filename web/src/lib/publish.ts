@@ -53,13 +53,19 @@ export async function publishDraft(admin: SupabaseClient, d: DraftRow, reviewer:
   await admin.from("article_drafts").update({ status: "published", reviewer_id: reviewerId }).eq("id", d.id);
 
   const url = `${SITE.url}/blog/${article.slug}`;
+  // Run from a laptop, SITE.url is localhost: never announce a link nobody else can open
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)/.test(SITE.url)) {
+    console.warn(`[publish] site URL is ${SITE.url}; skipped the Telegram channel post and IndexNow ping`);
+    return { ok: true as const, id: article.id as string, slug: article.slug as string, url };
+  }
   if (process.env.TELEGRAM_CHANNEL_ID) {
     const ok = await sendTelegram(process.env.TELEGRAM_CHANNEL_ID, `<b>${esc(d.title)}</b>\n\n${esc(d.summary ?? "")}`, [[{ text: "Read on GeeksFinder", url }]]);
     if (ok) await admin.from("articles").update({ telegram_posted: true }).eq("id", article.id);
   }
   if (process.env.INDEXNOW_KEY) {
-    // Bing/Yandex fast indexing; key is served at /api/indexnow-key
-    await fetch(`https://api.indexnow.org/indexnow?url=${encodeURIComponent(url)}&key=${process.env.INDEXNOW_KEY}&keyLocation=${encodeURIComponent(`${SITE.url}/api/indexnow-key`)}`, { signal: AbortSignal.timeout(10_000) }).catch(() => {});
+    // Bing/Yandex fast indexing
+    // Key file at the site root (next.config rewrite), so it covers every page; IndexNow finds it at /<key>.txt
+    await fetch(`https://api.indexnow.org/indexnow?url=${encodeURIComponent(url)}&key=${process.env.INDEXNOW_KEY}`, { signal: AbortSignal.timeout(10_000) }).catch(() => {});
   }
   return { ok: true as const, id: article.id as string, slug: article.slug as string, url };
 }

@@ -24,7 +24,8 @@ export async function saveDraft(input: { id: string; title: string; summary: str
   const after = { title: parsed.data.title, summary: parsed.data.summary, body_md: parsed.data.body_md };
   await admin
     .from("article_drafts")
-    .update({ ...after, facts: { ...facts, freshers_note: note }, overlap_score: checks.overlap, factcheck_passed: checks.factcheck_passed, check_notes: checks.notes })
+    // Clearing the review makes the pipeline re-review the edited version (and publish it if it now passes)
+    .update({ ...after, facts: { ...facts, freshers_note: note }, overlap_score: checks.overlap, factcheck_passed: checks.factcheck_passed, check_notes: checks.notes, review: null })
     .eq("id", parsed.data.id);
   await audit(user.id, "draft.edit", { table: "article_drafts", id: parsed.data.id }, { title: before.title, summary: before.summary }, after);
   revalidatePath(`/admin/drafts/${parsed.data.id}`);

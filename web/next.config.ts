@@ -43,6 +43,11 @@ const nextConfig: NextConfig = {
       { source: "/api/:path*", headers: [{ key: "Cache-Control", value: "no-store" }] },
     ];
   },
+  // IndexNow only accepts URLs under the key file's folder, so the key must be served from the site root
+  async rewrites() {
+    const key = process.env.INDEXNOW_KEY;
+    return key && /^[a-zA-Z0-9-]{8,128}$/.test(key) ? [{ source: `/${key}.txt`, destination: "/api/indexnow-key" }] : [];
+  },
 };
 
 export default nextConfig;

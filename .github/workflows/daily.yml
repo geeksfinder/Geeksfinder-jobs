@@ -43,6 +43,8 @@ jobs:
       BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
       EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
       UNSUBSCRIBE_SECRET: ${{ secrets.UNSUBSCRIBE_SECRET }}   # must match the website, or email unsubscribe links fail
+      TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}   # auto-published articles are posted to the channel
+      INDEXNOW_KEY: ${{ secrets.INDEXNOW_KEY }}                 # tells Bing about new articles
       JSEARCH_RUNS_PER_DAY: "1"   # the cloud fetches jobs once a day (06:00 IST); each run gets the full daily share of the free quota
       AUTO_PUBLISH: ${{ secrets.AUTO_PUBLISH }}   # optional secret: set it to 0 to stop blog auto-publishing (drafts then wait for review)
     steps:
@@ -65,6 +67,6 @@ jobs:
           esac
       - name: Run
         run: |
-          if [ "${{ steps.task.outputs.t }}" = "news" ]; then npx tsx scripts/news.ts
+          if [ "${{ steps.task.outputs.t }}" = "news" ]; then npx tsx scripts/news.ts && npx tsx scripts/review-drafts.ts
           elif [ "${{ steps.task.outputs.t }}" = "report" ]; then npx tsx scripts/report.ts
           else npx tsx scripts/cron.ts "${{ steps.task.outputs.t }}"; fi
