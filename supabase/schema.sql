@@ -432,3 +432,14 @@ alter table public.article_drafts add column if not exists guide_key text;
 create unique index if not exists article_drafts_guide_key on public.article_drafts (guide_key) where guide_key is not null;
 alter table public.article_drafts drop constraint if exists article_drafts_news_has_cluster;
 alter table public.article_drafts add constraint article_drafts_news_has_cluster check (kind = 'guide' or cluster_id is not null);
+
+-- 007 — remember which company domains were already looked up for HR contacts (and how many were found),
+-- so the HR pre-fill never spends a Hunter search twice on the same company within 30 days.
+-- Service role only; never readable by students.
+create table if not exists public.contact_searches (
+  company_domain text primary key,
+  searched_at timestamptz not null default now(),
+  found int not null default 0
+);
+alter table public.contact_searches enable row level security;
+revoke all on public.contact_searches from anon, authenticated;

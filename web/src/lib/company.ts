@@ -39,6 +39,25 @@ const KNOWN: Record<string, string> = {
   freshworks: "freshworks.com",
   zepto: "zeptonow.com",
   browserstack: "browserstack.com",
+  // Companies from the Lever, Ashby and SmartRecruiters feeds (their feeds don't include a website)
+  "bosch group": "bosch.com",
+  agoda: "agoda.com",
+  inmobi: "inmobi.com",
+  sigmoid: "sigmoid.com",
+  glance: "glance.com",
+  paytm: "paytm.com",
+  mindtickle: "mindtickle.com",
+  tekion: "tekion.com",
+  "100ms": "100ms.live",
+  snowflake: "snowflake.com",
+  sarvam: "sarvam.ai",
+  bureau: "bureau.id",
+  "new relic": "newrelic.com",
+  servicenow: "servicenow.com",
+  experian: "experian.com",
+  ubisoft: "ubisoft.com",
+  grab: "grab.com",
+  atlan: "atlan.com",
 };
 
 const DOMAIN = /^(?=.{4,80}$)([a-z0-9-]+\.)+[a-z]{2,}$/;

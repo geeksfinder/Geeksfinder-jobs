@@ -62,7 +62,7 @@ export async function findContact(
   return null;
 }
 
-async function scrapeSite(domain: string): Promise<string | null> {
+export async function scrapeSite(domain: string): Promise<string | null> {
   if (!/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(domain)) return null;
   for (const path of ["/careers", "/contact", "/jobs", ""]) {
     try {
