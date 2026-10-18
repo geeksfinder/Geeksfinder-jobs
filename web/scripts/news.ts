@@ -7,7 +7,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { generateJSON, untrusted } from "@/lib/ai";
 import { runChecks } from "@/lib/article-checks";
-import { writeArticle, type Fact } from "@/lib/claude";
+import { writeArticle, type Fact } from "@/lib/articles";
 import { safeFetch } from "@/lib/safe-fetch";
 import { adminClient } from "@/lib/supabase/admin";
 
