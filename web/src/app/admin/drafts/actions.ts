@@ -20,7 +20,8 @@ export async function saveDraft(input: { id: string; title: string; summary: str
   if (!before) return { ok: false as const, error: "Draft not found" };
 
   const facts = before.facts as DraftFacts;
-  const { data: items } = await admin.from("news_items").select("title, text").eq("cluster_id", before.cluster_id);
+  // Guides have no news cluster: nothing to compare for copying
+  const { data: items } = before.cluster_id ? await admin.from("news_items").select("title, text").eq("cluster_id", before.cluster_id) : { data: [] };
   const note = input.freshers_note.slice(0, 4000);
   const checks = runChecks(parsed.data.body_md, note, facts.facts.map((f) => f.fact), (items ?? []).map((i) => `${i.title}\n${i.text}`));
   const after = { title: parsed.data.title, summary: parsed.data.summary, body_md: parsed.data.body_md };
@@ -51,8 +52,12 @@ export async function reviewDraft(input: { id: string; action: "approve" | "reje
 
   const facts = d.facts as DraftFacts;
   const used =new Set(facts.used_source_urls?.length ? facts.used_source_urls : facts.facts.map((f) => f.source_url));
-  const { data: items } = await admin.from("news_items").select("url, title").eq("cluster_id", d.cluster_id);
-  const sources = (items ?? []).filter((i) => used.has(i.url)).map((i) => ({ url: i.url, title: i.title }));
+  const { data: items } = d.cluster_id ? await admin.from("news_items").select("url, title").eq("cluster_id", d.cluster_id) : { data: [] };
+  // Guides cite only GeeksFinder's own job data, and only when they used a number from it
+  const sources =
+    d.kind === "guide"
+      ? [...used].filter((u) => facts.facts.some((f) => f.source_url === u)).map((url) => ({ url, title: "GeeksFinder live job listings" }))
+      : (items ?? []).filter((i) => used.has(i.url)).map((i) => ({ url: i.url, title: i.title }));
   const slug = `${slugify(d.title)}-${new Date().toISOString().slice(0, 10)}`;
   const reviewer = profile.name || "GeeksFinder editor";
 

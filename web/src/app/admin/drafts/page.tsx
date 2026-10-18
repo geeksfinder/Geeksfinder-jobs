@@ -7,7 +7,7 @@ export default async function Drafts() {
   const { admin } = await requireAdmin();
   const { data } = await admin
     .from("article_drafts")
-    .select("id, title, topic, overlap_score, factcheck_passed, check_notes, status, created_at")
+    .select("id, title, topic, kind, overlap_score, factcheck_passed, check_notes, status, created_at")
     .order("created_at", { ascending: false })
     .limit(60);
 
@@ -31,7 +31,7 @@ export default async function Drafts() {
               <tr key={d.id} className="border-b border-line last:border-0">
                 <td className="px-4 py-3">
                   <Link href={`/admin/drafts/${d.id}`} className="font-medium text-ink underline-offset-4 hover:underline">{d.title}</Link>
-                  <p className="text-ink-3">{d.topic}{(d.check_notes as string[])?.length ? ` · ${(d.check_notes as string[]).length} issues` : ""}</p>
+                  <p className="text-ink-3">{d.kind === "guide" ? "Guide" : "News"} · {d.topic}{(d.check_notes as string[])?.length ? ` · ${(d.check_notes as string[]).length} issues` : ""}</p>
                 </td>
                 <td className={`tabular px-4 py-3 ${(d.overlap_score ?? 0) >= 8 ? "text-danger" : ""}`}>{d.overlap_score ?? "—"} words</td>
                 <td className="px-4 py-3">{d.factcheck_passed ? <Badge tone="success">Passed</Badge> : <Badge tone="warning">Check</Badge>}</td>

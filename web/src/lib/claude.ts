@@ -9,13 +9,13 @@ const MODEL = process.env.CLAUDE_ARTICLE_MODEL ?? "claude-haiku-5-5";
 let client: Anthropic | null = null;
 const anthropic = () => (client ??= new Anthropic());
 
-export async function writeWithClaude(headline: string, facts: string, revise = ""): Promise<ArticleDraft | null> {
+export async function writeWithClaude(headline: string, facts: string, revise = "", system = STYLE): Promise<ArticleDraft | null> {
   try {
     const response = await anthropic().messages.parse({
       model: MODEL,
       max_tokens: 8000,
       output_config: { effort: "medium", format: zodOutputFormat(ArticleSchema) },
-      system: STYLE,
+      system,
       messages: [
         {
           role: "user",

@@ -5,15 +5,15 @@
  * Nothing auto-publishes.
  */
 import { createHash, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { AiBudgetError, generateJSON, untrusted } from "@/lib/ai";
 import { runChecks } from "@/lib/article-checks";
-import { writeArticle, type ArticleDraft, type Fact } from "@/lib/articles";
+import { GUIDES_PER_DAY, NEWS_PER_DAY, writeArticle, type ArticleDraft, type ArticleKind, type Fact } from "@/lib/articles";
 import { safeFetch } from "@/lib/safe-fetch";
 import { adminClient } from "@/lib/supabase/admin";
 
 const db = adminClient();
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), ...a);
-const MAX_DRAFTS = Number(process.env.ARTICLES_PER_DAY ?? 3);
 
 type Item = { source_id: string; url: string; title: string; published_at: string | null; text: string; publisher: string | null };
 
@@ -202,53 +202,116 @@ async function main() {
   await fetchAll();
   // New stories first, then recent stories whose article failed to write (AI busy, no credit…) for another try
   const clusters = [...(await cluster()), ...(await unwrittenClusters())];
-  const today = new Date(Date.now() + 5.5 * 3_600_000).toISOString().slice(0, 10);
-  const { count } = await db.from("article_drafts").select("id", { count: "exact", head: true }).gte("created_at", `${today}T00:00:00+05:30`);
-  let budget = MAX_DRAFTS - (count ?? 0);
+  let newsLeft = NEWS_PER_DAY - (await draftsToday("news"));
 
-  for (const c of clusters) {
-    if (budget <= 0) break;
-    const { facts, sources, outlets } = await extractFacts(c.id);
-    if (facts.length < 4 || outlets < 2) continue;
-    const cluster = { headline: c.headline, facts };
-    const factList = facts.map((f) => f.fact);
-    let draft: ArticleDraft | null;
-    let checks: ReturnType<typeof runChecks>;
-    try {
-      draft = await writeArticle(cluster);
-      if (!draft) continue;
-      checks = runChecks(draft.body_md, draft.freshers_note, factList, sources);
-      // One automatic rewrite with the checker's notes; keep whichever version has fewer problems
-      if (!checks.passed) {
-        const retry = await writeArticle(cluster, checks.notes);
-        const retryChecks = retry ? runChecks(retry.body_md, retry.freshers_note, factList, sources) : null;
-        if (retry && retryChecks && retryChecks.notes.length < checks.notes.length) {
-          draft = retry;
-          checks = retryChecks;
-        }
-      }
-    } catch (e) {
-      if (e instanceof AiBudgetError) {
-        log("news: daily AI cap reached; the rest wait for the next run");
-        break;
-      }
-      throw e;
+  try {
+    for (const c of clusters) {
+      if (newsLeft <= 0) break;
+      const { facts, sources, outlets } = await extractFacts(c.id);
+      if (facts.length < 4 || outlets < 2) continue;
+      const done = await draftWithRewrite({ headline: c.headline, facts }, sources, "news");
+      if (!done) continue;
+      await saveDraft(done, facts, { kind: "news", cluster_id: c.id });
+      newsLeft--;
     }
-    await db.from("article_drafts").insert({
-      cluster_id: c.id,
-      topic: draft.topic,
-      title: draft.title,
-      summary: draft.summary,
-      facts: { facts, related_skills: draft.related_skills, freshers_note: draft.freshers_note, used_source_urls: draft.used_source_urls },
-      body_md: draft.body_md,
-      overlap_score: checks.overlap,
-      factcheck_passed: checks.factcheck_passed,
-      check_notes: checks.notes,
-      status: "draft",
-    });
-    budget--;
-    log(`news: drafted "${draft.title}" (${checks.passed ? "checks passed" : `${checks.notes.length} issues`})`);
+    await writeGuides();
+  } catch (e) {
+    if (!(e instanceof AiBudgetError)) throw e;
+    log("news: daily AI cap reached; the rest wait for the next run");
   }
+}
+
+type Done = { draft: ArticleDraft; checks: ReturnType<typeof runChecks> };
+
+async function draftsToday(kind: ArticleKind) {
+  const today = new Date(Date.now() + 5.5 * 3_600_000).toISOString().slice(0, 10);
+  const { count } = await db.from("article_drafts").select("id", { count: "exact", head: true }).eq("kind", kind).gte("created_at", `${today}T00:00:00+05:30`);
+  return count ?? 0;
+}
+
+/** Write, check, and give the writer one rewrite with the checker's notes; keep whichever version has fewer problems. */
+async function draftWithRewrite(cluster: { headline: string; facts: Fact[] }, sources: string[], kind: ArticleKind): Promise<Done | null> {
+  const factList = cluster.facts.map((f) => f.fact);
+  let draft = await writeArticle(cluster, [], kind);
+  if (!draft) return null;
+  let checks = runChecks(draft.body_md, draft.freshers_note, factList, sources);
+  if (!checks.passed) {
+    const retry = await writeArticle(cluster, checks.notes, kind);
+    const retryChecks = retry ? runChecks(retry.body_md, retry.freshers_note, factList, sources) : null;
+    if (retry && retryChecks && retryChecks.notes.length < checks.notes.length) {
+      draft = retry;
+      checks = retryChecks;
+    }
+  }
+  return { draft, checks };
+}
+
+async function saveDraft({ draft, checks }: Done, facts: Fact[], where: { kind: ArticleKind; cluster_id?: string; guide_key?: string }) {
+  const { error } = await db.from("article_drafts").insert({
+    ...where,
+    topic: draft.topic,
+    title: draft.title,
+    summary: draft.summary,
+    facts: { facts, related_skills: draft.related_skills, freshers_note: draft.freshers_note, used_source_urls: draft.used_source_urls },
+    body_md: draft.body_md,
+    overlap_score: checks.overlap,
+    factcheck_passed: checks.factcheck_passed,
+    check_notes: checks.notes,
+    status: "draft",
+  });
+  if (error) return log(`${where.kind}: couldn't save "${draft.title}": ${error.message}`);
+  log(`${where.kind}: drafted "${draft.title}" (${checks.passed ? "checks passed" : `${checks.notes.length} issues`})`);
+}
+
+type Guide = { key: string; topic: string; title: string; angle: string; skills: string[] };
+
+/** Evergreen guides from scripts/guides.json, in order, each topic once. */
+async function writeGuides() {
+  let left = GUIDES_PER_DAY - (await draftsToday("guide"));
+  if (left <= 0) return;
+  const { guides } = JSON.parse(readFileSync(new URL("./guides.json", import.meta.url), "utf8")) as { guides: Guide[] };
+  const { data: used } = await db.from("article_drafts").select("guide_key").not("guide_key", "is", null);
+  const taken = new Set((used ?? []).map((u) => u.guide_key));
+  const todo = guides.filter((g) => !taken.has(g.key));
+  if (!todo.length) return log("guides: every topic in guides.json has been drafted; add new ones at the end");
+
+  for (const g of todo) {
+    if (left <= 0) break;
+    const facts = await siteFacts(g.skills);
+    const headline = `${g.title}. Angle: ${g.angle} Topic label to use: ${g.topic}.`;
+    // No news sources to compare against, so the copy check is skipped; numbers and names still must be in the facts
+    const done = await draftWithRewrite({ headline, facts }, [], "guide");
+    if (!done) continue;
+    await saveDraft(done, facts, { kind: "guide", guide_key: g.key });
+    left--;
+  }
+}
+
+/** Live numbers from GeeksFinder's own job listings (last 30 days) that guides may cite. */
+async function siteFacts(skills: string[]): Promise<Fact[]> {
+  const url = `${(process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "")}/jobs`;
+  const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
+  const { data: jobs } = await db.from("jobs").select("title, location, remote, skills, fresher_friendly").eq("enriched", true).gte("created_at", since).limit(5000);
+  const all = jobs ?? [];
+  const fresher = all.filter((j) => j.fresher_friendly);
+  const pool = fresher.length >= 20 ? fresher : all;
+  const label = pool === fresher ? "fresher-friendly jobs" : "jobs";
+  const count = (rows: typeof all, test: (j: (typeof all)[number]) => boolean) => rows.filter(test).length;
+  const tally = (items: string[]) => [...items.reduce((m, s) => m.set(s, (m.get(s) ?? 0) + 1), new Map<string, number>())].sort((a, b) => b[1] - a[1]);
+
+  const facts: string[] = [
+    `GeeksFinder listed ${all.length} live jobs in India in the last 30 days, of which ${fresher.length} were marked fresher-friendly.`,
+    `${count(all, (j) => /intern/i.test(j.title))} of those jobs were internships and ${count(all, (j) => !!j.remote)} were remote.`,
+  ];
+  const topSkills = tally(pool.flatMap((j) => (j.skills ?? []) as string[])).slice(0, 8);
+  if (topSkills.length) facts.push(`The skills most often asked for in ${label} on GeeksFinder this month: ${topSkills.map(([s, n]) => `${s} (${n} jobs)`).join(", ")}.`);
+  const topCities = tally(pool.filter((j) => !j.remote).map((j) => String(j.location ?? "").split(",")[0].trim()).filter(Boolean)).slice(0, 6);
+  if (topCities.length) facts.push(`Cities with the most ${label} on GeeksFinder this month: ${topCities.map(([c, n]) => `${c} (${n})`).join(", ")}.`);
+  for (const s of skills) {
+    const n = count(pool, (j) => ((j.skills ?? []) as string[]).some((k) => k.toLowerCase() === s.toLowerCase()));
+    if (n) facts.push(`${n} of the ${pool.length} ${label} on GeeksFinder this month asked for ${s}.`);
+  }
+  return facts.map((fact) => ({ fact, source_url: url }));
 }
 
 main().then(() => process.exit(0)).catch((e) => { console.error(e); process.exit(1); });
