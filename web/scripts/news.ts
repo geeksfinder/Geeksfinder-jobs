@@ -176,10 +176,29 @@ async function unwrittenClusters(): Promise<{ id: string; headline: string }[]> 
   return ids.filter((id) => !drafted.has(id)).map((id) => ({ id, headline: (items ?? []).find((i) => i.cluster_id === id)!.title.slice(0, 200) }));
 }
 
+/** One tiny request on the cheapest models; listing models isn't enough, since blocked projects can still list them. */
+async function geminiKeyWorks(key: string) {
+  const models = (process.env.GEMINI_MODELS ?? "gemini-3.8-flash,gemini-3.5-flash-lite,gemini-3.1-flash-lite").split(",").map((m) => m.trim()).reverse();
+  for (const model of models) {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+      body: JSON.stringify({ contents: [{ role: "user", parts: [{ text: "Reply OK" }] }], generationConfig: { maxOutputTokens: 5 } }),
+      signal: AbortSignal.timeout(20_000),
+    }).catch(() => null);
+    if (res?.ok) return true;
+  }
+  return false;
+}
+
 async function main() {
   // Optional separate Gemini key just for the blog, so its free quota doesn't compete with job enrichment and
   // resume tailoring. This script runs in its own process, so swapping the variable here affects only the blog.
-  if (process.env.GEMINI_BLOG_API_KEY) process.env.GEMINI_API_KEY = process.env.GEMINI_BLOG_API_KEY;
+  // A blocked or mistyped blog key must not stop the blog, so it is tested first and the main key is kept if it fails.
+  if (process.env.GEMINI_BLOG_API_KEY) {
+    if (await geminiKeyWorks(process.env.GEMINI_BLOG_API_KEY)) process.env.GEMINI_API_KEY = process.env.GEMINI_BLOG_API_KEY;
+    else log("news: GEMINI_BLOG_API_KEY doesn't work (blocked, wrong or out of quota); using GEMINI_API_KEY for the blog");
+  }
   await fetchAll();
   // New stories first, then recent stories whose article failed to write (AI busy, no credit…) for another try
   const clusters = [...(await cluster()), ...(await unwrittenClusters())];
