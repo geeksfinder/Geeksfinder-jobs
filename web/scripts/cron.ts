@@ -79,23 +79,33 @@ async function fetchJSearch(queries: string[]): Promise<RawJob[]> {
   if (!process.env.RAPIDAPI_KEY) return [];
   const out: RawJob[] = [];
   const maxPerRun = Number(process.env.JSEARCH_MAX_QUERIES ?? 6);
+  // 10 pages per request returns ~2.5x more jobs per quota unit than single pages (it's charged as ~3 units)
+  const pages = Number(process.env.JSEARCH_PAGES ?? 10);
   let allowed = maxPerRun;
   let used = 0;
-  for (const q of queries) {
+  let unitCost = pages > 1 ? 3 : 1; // replaced by the measured cost after the second request
+  let lastRemaining: number | null = null;
+  // Rotate which searches go first (2 runs a day), so every query gets its turn across the week
+  const now = new Date(Date.now() + 5.5 * 3_600_000);
+  const slot = Math.floor((now.getTime() - Date.UTC(now.getUTCFullYear(), 0, 1)) / 86_400_000) * 2 + (now.getUTCHours() >= 12 ? 1 : 0);
+  const ordered = queries.map((_, i) => queries[(i + slot) % queries.length]);
+  for (const q of ordered) {
     if (used >= allowed) break;
     try {
-      const url = `https://jsearch.p.rapidapi.com/search-v2?query=${encodeURIComponent(`${q} in India`)}&country=in&date_posted=3days`;
-      const res = await fetchRetry(url, { headers: { "X-RapidAPI-Key": process.env.RAPIDAPI_KEY, "X-RapidAPI-Host": "jsearch.p.rapidapi.com" }, signal: AbortSignal.timeout(40_000) });
+      const url = `https://jsearch.p.rapidapi.com/search-v2?query=${encodeURIComponent(`${q} in India`)}&country=in&date_posted=week&num_pages=${pages}`;
+      const res = await fetchRetry(url, { headers: { "X-RapidAPI-Key": process.env.RAPIDAPI_KEY, "X-RapidAPI-Host": "jsearch.p.rapidapi.com" }, signal: AbortSignal.timeout(90_000) });
       used++;
-      // Fair share of what's left this month (headers: requests remaining, seconds until reset)
+      // Fair share of what's left this month, in quota units (headers: units remaining, seconds until reset)
       const remaining = Number(res.headers.get("x-ratelimit-requests-remaining"));
       const resetDays = Number(res.headers.get("x-ratelimit-requests-reset")) / 86_400;
       if (Number.isFinite(remaining) && Number.isFinite(resetDays)) {
+        if (lastRemaining !== null && lastRemaining > remaining) unitCost = lastRemaining - remaining;
+        lastRemaining = remaining;
         const reserve = Number(process.env.JSEARCH_RESERVE ?? 10);
         const runsPerDay = Number(process.env.JSEARCH_RUNS_PER_DAY ?? 2);
-        // This run's share includes the request just made; at the end of the month it can drop to "stop now"
-        const share = Math.floor((remaining + used - reserve) / Math.max(1, Math.ceil(resetDays)) / runsPerDay);
-        allowed = Math.min(maxPerRun, Math.max(used, share));
+        // This run's share includes what it already spent; at the end of the month it can drop to "stop now"
+        const unitsShare = (remaining + used * unitCost - reserve) / Math.max(1, Math.ceil(resetDays)) / runsPerDay;
+        allowed = Math.min(maxPerRun, Math.max(used, Math.floor(unitsShare / unitCost)));
       }
       if (!res.ok) { log("jsearch", res.status, (await res.text()).slice(0, 120)); break; }
       const data = await res.json();
