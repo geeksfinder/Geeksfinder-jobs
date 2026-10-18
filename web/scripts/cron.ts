@@ -70,32 +70,56 @@ const isFresherFriendly = (title: string, minYears: number, aiSaysFresher: boole
 
 // ---------- Fetchers ----------
 
+/**
+ * JSearch (RapidAPI) — aggregated listings from many Indian job sites; the main source of fresher roles.
+ * The free plan is a small monthly quota shared by every run (PC and cloud), so each run reads the quota
+ * RapidAPI reports and spends only its fair share for the day: remaining ÷ days until the quota resets.
+ */
 async function fetchJSearch(queries: string[]): Promise<RawJob[]> {
   if (!process.env.RAPIDAPI_KEY) return [];
   const out: RawJob[] = [];
-  // Free quota is small — cap calls per day
-  for (const q of queries.slice(0, Number(process.env.JSEARCH_MAX_QUERIES ?? 4))) {
+  const maxPerRun = Number(process.env.JSEARCH_MAX_QUERIES ?? 6);
+  let allowed = maxPerRun;
+  let used = 0;
+  for (const q of queries) {
+    if (used >= allowed) break;
     try {
-      const res = await fetchRetry(`https://jsearch.p.rapidapi.com/search?query=${encodeURIComponent(`${q} in India`)}&page=1&num_pages=1&country=in&date_posted=today`, {
-        headers: { "X-RapidAPI-Key": process.env.RAPIDAPI_KEY, "X-RapidAPI-Host": "jsearch.p.rapidapi.com" },
-      });
+      const url = `https://jsearch.p.rapidapi.com/search-v2?query=${encodeURIComponent(`${q} in India`)}&country=in&date_posted=3days`;
+      const res = await fetchRetry(url, { headers: { "X-RapidAPI-Key": process.env.RAPIDAPI_KEY, "X-RapidAPI-Host": "jsearch.p.rapidapi.com" }, signal: AbortSignal.timeout(40_000) });
+      used++;
+      // Fair share of what's left this month (headers: requests remaining, seconds until reset)
+      const remaining = Number(res.headers.get("x-ratelimit-requests-remaining"));
+      const resetDays = Number(res.headers.get("x-ratelimit-requests-reset")) / 86_400;
+      if (Number.isFinite(remaining) && Number.isFinite(resetDays)) {
+        const reserve = Number(process.env.JSEARCH_RESERVE ?? 10);
+        const runsPerDay = Number(process.env.JSEARCH_RUNS_PER_DAY ?? 2);
+        // This run's share includes the request just made; at the end of the month it can drop to "stop now"
+        const share = Math.floor((remaining + used - reserve) / Math.max(1, Math.ceil(resetDays)) / runsPerDay);
+        allowed = Math.min(maxPerRun, Math.max(used, share));
+      }
+      if (!res.ok) { log("jsearch", res.status, (await res.text()).slice(0, 120)); break; }
       const data = await res.json();
-      for (const j of data.data ?? []) {
+      for (const j of (data.data?.jobs ?? data.data ?? []) as Record<string, unknown>[]) {
+        if (!j.job_id || !j.job_title || !j.employer_name) continue;
+        // Highlights hold the qualifications/responsibilities as lists; keep them for skill extraction
+        const hl = (j.job_highlights ?? {}) as Record<string, string[]>;
+        const lists = Object.entries(hl).map(([k, items]) => `${k}\n${(items ?? []).map((i) => `• ${i}`).join("\n")}`).join("\n\n");
         out.push({
           source: `jsearch:${j.job_publisher ?? ""}`,
-          source_id: j.job_id,
-          title: j.job_title,
-          company: j.employer_name,
-          company_domain: domainOf(j.employer_website),
-          location: [j.job_city, j.job_state].filter(Boolean).join(", ") || "India",
+          source_id: String(j.job_id),
+          title: String(j.job_title),
+          company: String(j.employer_name),
+          company_domain: domainOf(j.employer_website as string | null),
+          location: [j.job_city, j.job_state].filter(Boolean).join(", ") || String(j.job_location ?? "India"),
           remote: !!j.job_is_remote,
-          description: j.job_description ?? "",
-          apply_url: j.job_apply_link,
-          posted_at: j.job_posted_at_datetime_utc ?? null,
+          description: [String(j.job_description ?? ""), lists].filter(Boolean).join("\n\n"),
+          apply_url: (j.job_apply_link as string) ?? null,
+          posted_at: (j.job_posted_at_datetime_utc as string) ?? null,
         });
       }
     } catch (e) { log("jsearch error", q, e); }
   }
+  log(`jsearch: ${used} requests this run, ${out.length} jobs`);
   return out;
 }
 
@@ -263,7 +287,10 @@ async function ingest() {
   const roleCounts = new Map<string, number>();
   for (const p of profiles ?? []) for (const r of p.preferred_roles ?? []) roleCounts.set(r.toLowerCase(), (roleCounts.get(r.toLowerCase()) ?? 0) + 1);
   const queries = [...roleCounts.entries()].sort((a, b) => b[1] - a[1]).map(([r]) => `${r} fresher`);
-  if (!queries.length) queries.push("software engineer fresher", "data analyst fresher", "web developer intern");
+  // Always cover the core fresher searches and internships, after whatever roles students asked for
+  for (const q of ["software engineer fresher", "internship", "data analyst fresher", "graduate engineer trainee", "web developer fresher", "fresher jobs"]) {
+    if (!queries.includes(q)) queries.push(q);
+  }
 
   const fetched = (await Promise.all([fetchJSearch(queries), fetchAdzuna(queries), fetchBoards(), fetchSmartRecruiters(), fetchRemotive()])).flat();
   const all = fetched.filter(worthKeeping);
