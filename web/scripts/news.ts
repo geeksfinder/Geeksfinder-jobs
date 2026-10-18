@@ -15,7 +15,7 @@ const db = adminClient();
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), ...a);
 const MAX_DRAFTS = Number(process.env.ARTICLES_PER_DAY ?? 3);
 
-type Item = { source_id: string; url: string; title: string; published_at: string | null; text: string };
+type Item = { source_id: string; url: string; title: string; published_at: string | null; text: string; publisher: string | null };
 
 const decode = (s: string) =>
   s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
@@ -23,23 +23,44 @@ const stripTags = (s: string) => decode(s).replace(/<script[\s\S]*?<\/script>|<s
 const tag = (xml: string, name: string) => xml.match(new RegExp(`<${name}[^>]*>([\\s\\S]*?)</${name}>`, "i"))?.[1] ?? "";
 const host = (u: string) => { try { return new URL(u).hostname.replace(/^www\./, ""); } catch { return ""; } };
 
-/** Main article text: prefer <article>, else all <p> tags. Treated as untrusted data downstream. */
+/**
+ * Main article text: prefer <article>, else all <p> tags; some sites (Economic Times) keep the text only in the
+ * schema.org articleBody they publish for search engines, so take whichever is longer. Untrusted data downstream.
+ */
 function articleText(html: string) {
   const art = html.match(/<article[\s\S]*?<\/article>/i)?.[0] ?? html;
-  const paras = [...art.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)].map((m) => stripTags(m[1])).filter((p) => p.length > 40);
-  return paras.join("\n").slice(0, 12000);
+  const paras = [...art.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)].map((m) => stripTags(m[1])).filter((p) => p.length > 40).join("\n");
+  const ld = [...html.matchAll(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)]
+    .map((m) => {
+      try {
+        const j = JSON.parse(m[1]);
+        const nodes = Array.isArray(j) ? j : (j["@graph"] ?? [j]);
+        return nodes.map((n: { articleBody?: unknown }) => (typeof n?.articleBody === "string" ? n.articleBody : "")).join("\n");
+      } catch {
+        return "";
+      }
+    })
+    .join("\n");
+  const body = stripTags(ld);
+  return (body.length > paras.length ? body : paras).slice(0, 12000);
 }
 
 async function fetchRss(src: { id: string; url: string }): Promise<Item[]> {
   const res = await safeFetch(src.url, { maxBytes: 2_000_000 });
   const items = [...res.text.matchAll(/<item>([\s\S]*?)<\/item>/gi)].slice(0, 25);
-  return items.map(([, xml]) => ({
-    source_id: src.id,
-    url: decode(tag(xml, "link")).trim(),
-    title: stripTags(tag(xml, "title")),
-    published_at: tag(xml, "pubDate") ? new Date(tag(xml, "pubDate")).toISOString() : null,
-    text: stripTags(tag(xml, "description")),
-  }));
+  return items.map(([, xml]) => {
+    const url = decode(tag(xml, "link")).trim();
+    // Google News items name the real outlet in <source url="https://www.thehindu.com">; direct feeds are the outlet
+    const sourceUrl = xml.match(/<source[^>]*url="([^"]+)"/i)?.[1];
+    return {
+      source_id: src.id,
+      url,
+      title: stripTags(tag(xml, "title")),
+      published_at: tag(xml, "pubDate") ? new Date(tag(xml, "pubDate")).toISOString() : null,
+      text: stripTags(tag(xml, "description")),
+      publisher: host(sourceUrl ?? url) || null,
+    };
+  });
 }
 
 async function fetchGNews(): Promise<Omit<Item, "source_id">[]> {
@@ -48,7 +69,7 @@ async function fetchGNews(): Promise<Omit<Item, "source_id">[]> {
   const res = await fetch(`https://gnews.io/api/v4/search?q=${q}&lang=en&country=in&max=25&apikey=${process.env.GNEWS_API_KEY}`, { signal: AbortSignal.timeout(10000) });
   const data = await res.json();
   return (data.articles ?? []).map((a: { url: string; title: string; publishedAt: string; content?: string; description?: string }) => ({
-    url: a.url, title: a.title, published_at: a.publishedAt, text: `${a.description ?? ""}\n${a.content ?? ""}`,
+    url: a.url, title: a.title, published_at: a.publishedAt, text: `${a.description ?? ""}\n${a.content ?? ""}`, publisher: host(a.url) || null,
   }));
 }
 
@@ -67,7 +88,13 @@ async function fetchAll() {
 
   // Skip known URLs; fetch fuller text for new ones (SSRF-guarded)
   const urls = [...new Set(items.map((i) => i.url).filter((u) => /^https?:/.test(u)))];
-  const { data: known } = await db.from("news_items").select("url").in("url", urls.slice(0, 500));
+  const { data: known } = await db.from("news_items").select("url, publisher").in("url", urls.slice(0, 500));
+  // Items saved before publishers were recorded: fill in the outlet so they can count as separate sources
+  for (const k of known ?? []) {
+    if (k.publisher) continue;
+    const it = items.find((i) => i.url === k.url && i.publisher);
+    if (it) await db.from("news_items").update({ publisher: it.publisher }).eq("url", k.url).is("publisher", null);
+  }
   const seen = new Set((known ?? []).map((k) => k.url));
   let added = 0;
   for (const it of items) {
@@ -92,9 +119,10 @@ type Cluster = { headline: string; item_ids: string[]; relevance: number };
 
 async function cluster(): Promise<{ id: string; headline: string }[]> {
   const since = new Date(Date.now() - 48 * 3_600_000).toISOString();
-  const { data: items } = await db.from("news_items").select("id, url, title, text").is("cluster_id", null).gte("created_at", since).limit(120);
+  const { data: items } = await db.from("news_items").select("id, url, title, text, publisher").is("cluster_id", null).gte("created_at", since).limit(120);
   if (!items?.length) return [];
-  const list = items.map((i) => `${i.id} | ${host(i.url)} | ${i.title} | ${i.text.slice(0, 200)}`).join("\n");
+  const outlet = (i: { url: string; publisher: string | null }) => i.publisher || host(i.url);
+  const list = items.map((i) => `${i.id} | ${outlet(i)} | ${i.title} | ${i.text.slice(0, 200)}`).join("\n");
   const res = await generateJSON<{ clusters: Cluster[] }>(`Group these news items into clusters that report the SAME event (same company + same announcement).
 Score each cluster's relevance 0–10 for Indian final-year students and freshers looking for jobs (hiring drives, fresher salaries, layoffs, in-demand skills, internships, exams/certifications, interview-process changes). Drop unrelated items.
 Return JSON {"clusters":[{"headline":string,"item_ids":string[],"relevance":number}]}.
@@ -105,7 +133,7 @@ ${untrusted("news_list", list, 30000)}`);
   const kept: { id: string; headline: string }[] = [];
   for (const c of (res.clusters ?? []).sort((a, b) => b.relevance - a.relevance)) {
     const ids = c.item_ids.filter((id) => byId.has(id));
-    const domains = new Set(ids.map((id) => host(byId.get(id)!.url)));
+    const domains = new Set(ids.map((id) => outlet(byId.get(id)!)));
     if (c.relevance < 7 || domains.size < 2) continue; // need 2+ independent sources
     const cid = randomUUID();
     await db.from("news_items").update({ cluster_id: cid }).in("id", ids);

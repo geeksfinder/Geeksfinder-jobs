@@ -5,7 +5,8 @@ import { adminClient } from "./supabase/admin";
 /**
  * Blog article writer (plan §6), shared by every provider. The model writes from an extracted fact list only —
  * never from source text — and every draft goes through the checks and the admin review queue before publishing.
- * Provider: Claude if ANTHROPIC_API_KEY is set, else OpenAI if OPENAI_API_KEY is set (override with ARTICLE_PROVIDER).
+ * Provider: Claude if ANTHROPIC_API_KEY is set, else OpenAI if OPENAI_API_KEY is set, else Gemini's free tier
+ * (with Groq's free tier as fallback) — so the blog runs at no cost by default. Override with ARTICLE_PROVIDER.
  */
 const DAILY_ARTICLE_CAP = Number(process.env.ARTICLES_PER_DAY ?? 3);
 
@@ -36,15 +37,18 @@ Style:
 - No exclamation marks. No emoji. Do not promise jobs or outcomes.
 - Write so a good human editor would be happy to publish it because it is genuinely useful — not to trick AI detectors.`;
 
-export function articleProvider(): "claude" | "openai" | null {
+type Provider = "claude" | "openai" | "gemini";
+
+export function articleProvider(): Provider | null {
   const forced = process.env.ARTICLE_PROVIDER;
-  if (forced === "claude" || forced === "openai") return forced;
+  if (forced === "claude" || forced === "openai" || forced === "gemini") return forced;
   if (process.env.ANTHROPIC_API_KEY) return "claude";
   if (process.env.OPENAI_API_KEY) return "openai";
+  if (process.env.GEMINI_API_KEY || process.env.GROQ_API_KEY) return "gemini";
   return null;
 }
 
-/** Same cap whichever provider writes (paid per token). */
+/** Same cap whichever provider writes (paid per token, or free-tier quota shared with the job pipeline). */
 async function articleBudget() {
   const { data, error } = await adminClient().rpc("bump_ai_usage", { p_provider: "claude-articles", p_cost: 0 });
   if (error) return;
@@ -55,12 +59,15 @@ async function articleBudget() {
 export async function writeArticle(cluster: ArticleCluster): Promise<ArticleDraft | null> {
   const provider = articleProvider();
   if (!provider) {
-    console.warn("[articles] no ANTHROPIC_API_KEY or OPENAI_API_KEY set; skipping");
+    console.warn("[articles] no AI key set (Gemini, Groq, OpenAI or Anthropic); skipping");
     return null;
   }
   await articleBudget();
   const facts = cluster.facts.map((f, i) => `${i + 1}. ${f.fact} [${f.source_url}]`).join("\n");
-  const write = provider === "claude" ? (await import("./claude")).writeWithClaude : (await import("./openai")).writeWithOpenAI;
+  const write =
+    provider === "claude" ? (await import("./claude")).writeWithClaude
+    : provider === "openai" ? (await import("./openai")).writeWithOpenAI
+    : (await import("./gemini-writer")).writeWithGemini;
   const draft = await write(cluster.headline, facts);
   // Never trust the shape of model output, whatever the provider promises
   const parsed = draft ? ArticleSchema.safeParse(draft) : null;

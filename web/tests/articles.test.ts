@@ -20,16 +20,31 @@ function mockOpenAI(reply: Record<string, unknown>, status = 200) {
 }
 const chat = (content: unknown, extra: Record<string, unknown> = {}) => ({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify(content), ...extra } }] });
 
+describe("free Gemini writer", () => {
+  beforeEach(() => vi.resetModules());
+  it("re-validates Gemini's JSON and drops anything off-shape", async () => {
+    vi.doMock("@/lib/ai", async (orig) => ({ ...(await orig<typeof import("@/lib/ai")>()), generateJSON: vi.fn().mockResolvedValueOnce(good).mockResolvedValueOnce({ title: "only a title" }) }));
+    process.env.ARTICLE_PROVIDER = "gemini";
+    const { writeArticle } = await import("@/lib/articles");
+    expect(await writeArticle(cluster)).toEqual(good);
+    expect(await writeArticle(cluster)).toBeNull();
+    delete process.env.ARTICLE_PROVIDER;
+    vi.doUnmock("@/lib/ai");
+  });
+});
+
 describe("blog writer provider", () => {
   beforeEach(() => {
     vi.resetModules();
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.ARTICLE_PROVIDER;
+    delete process.env.GEMINI_API_KEY;
+    delete process.env.GROQ_API_KEY;
     process.env.OPENAI_API_KEY = "sk-test-not-real";
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it("uses Claude when its key is set, otherwise OpenAI, otherwise nothing", async () => {
+  it("uses Claude, then OpenAI, then the free Gemini tier, then nothing", async () => {
     const { articleProvider } = await import("@/lib/articles");
     expect(articleProvider()).toBe("openai");
     process.env.ANTHROPIC_API_KEY = "x";
@@ -39,6 +54,9 @@ describe("blog writer provider", () => {
     delete process.env.ARTICLE_PROVIDER;
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.OPENAI_API_KEY;
+    process.env.GEMINI_API_KEY = "g";
+    expect(articleProvider()).toBe("gemini");
+    delete process.env.GEMINI_API_KEY;
     expect(articleProvider()).toBeNull();
   });
 
