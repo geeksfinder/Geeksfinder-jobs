@@ -5,6 +5,7 @@ import { rzp } from "@/lib/razorpay";
 import { rateLimit } from "@/lib/ratelimit";
 import { badRequest, fail, tooMany, unauthorized } from "@/lib/security";
 import { adminClient, requireUser } from "@/lib/supabase/server";
+import { whatsappOnSale } from "@/lib/whatsapp/on-sale";
 import { parseJson } from "@/lib/validate";
 
 const TRIAL_DAYS = 7;
@@ -18,9 +19,11 @@ export async function POST(request: Request) {
   const body = await parseJson(request, Body);
   if (!body) return badRequest("Pick a plan.");
   const plan = body.plan as keyof typeof PLANS;
+  // Nobody pays for WhatsApp alerts before they are switched on (lib/whatsapp/on-sale.ts)
+  if (PLANS[plan].whatsapp && !whatsappOnSale()) return NextResponse.json({ error: "WhatsApp alerts aren't available yet. Pick the plan without WhatsApp." }, { status: 409 });
   // The price is whatever the Razorpay plan says; the browser only picks which plan
   const planId = razorpayPlanId(plan);
-  if (!planId) return NextResponse.json({ error: `${PLANS[plan].name} isn't available yet. Pick another plan.` }, { status: 503 });
+  if (!planId) return NextResponse.json({ error: `${PLANS[plan].name} ${PLANS[plan].every} isn't available yet. Pick the other option.` }, { status: 503 });
   const admin = adminClient();
 
   const { data: existing } = await admin.from("subscriptions").select("razorpay_subscription_id, status").eq("user_id", user.id).maybeSingle();

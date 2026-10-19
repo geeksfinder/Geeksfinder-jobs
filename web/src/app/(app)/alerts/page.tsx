@@ -1,4 +1,5 @@
 import { canSendTestAlert } from "@/lib/alerts";
+import { featureTier } from "@/lib/pricing";
 import { requireUser } from "@/lib/supabase/server";
 import { AlertForm } from "./AlertForm";
 import { DeleteAccount } from "./DeleteAccount";
@@ -21,7 +22,7 @@ export default async function AlertsPage() {
       {canSendTestAlert(user!.created_at) && <TestAlert telegramConnected={!!u?.telegram_chat_id} email={user!.email ?? ""} />}
       <div id="alerts-form">
         <AlertForm
-          plan={(u?.plan ?? "free") as "free" | "pro"}
+          plan={featureTier(u?.plan)}
           telegramConnected={!!u?.telegram_chat_id}
           initial={{
             frequency: a?.frequency ?? "weekly",

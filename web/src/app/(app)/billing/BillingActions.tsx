@@ -14,7 +14,7 @@ declare global {
   }
 }
 
-export function BillingActions({ active, initialPlan }: { active: boolean; initialPlan?: PaidPlan }) {
+export function BillingActions({ active, initialPlan, whatsappOnSale }: { active: boolean; initialPlan?: PaidPlan; whatsappOnSale: boolean }) {
   const [busy, setBusy] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [success, setSuccess] = useState<PaidPlan | null>(null);
@@ -80,6 +80,7 @@ export function BillingActions({ active, initialPlan }: { active: boolean; initi
           onSubscribe={subscribe}
           busy={busy}
           initialPlan={initialPlan}
+          whatsappOnSale={whatsappOnSale}
         />
       )}
     </div>

@@ -4,7 +4,7 @@ import { AREA_ROLES } from "@/lib/admin/constants";
 import { getFlag } from "@/lib/admin/flags";
 import { adminError, adminPost } from "@/lib/admin/route";
 import { sendEmail } from "@/lib/email";
-import { PLANS, isPaidPlan } from "@/lib/pricing";
+import { DEFAULT_PLAN, PLANS, isPaidPlan } from "@/lib/pricing";
 import { sendTelegram } from "@/lib/telegram";
 import { RemindBody } from "@/lib/validate";
 
@@ -12,7 +12,7 @@ import { RemindBody } from "@/lib/validate";
 export const POST = adminPost(AREA_ROLES.remind, RemindBody, async ({ admin, user }, { user_id }) => {
   const { data: sub } = await admin.from("subscriptions").select("status, plan_code").eq("user_id", user_id).maybeSingle();
   if (!sub || !["pending", "halted"].includes(sub.status ?? "")) return adminError(409, "not_pending", "This student has no pending or halted debit.");
-  const plan = isPaidPlan(sub.plan_code) ? PLANS[sub.plan_code] : PLANS.hustle;
+  const plan = isPaidPlan(sub.plan_code) ? PLANS[sub.plan_code] : PLANS[DEFAULT_PLAN];
   const { data: u } = await admin.from("users").select("email, telegram_chat_id").eq("id", user_id).single();
   const msg = `Your ₹${plan.price} ${plan.name} renewal didn't go through. Please keep ₹${plan.price} in your UPI-linked account — we'll retry automatically.`;
 

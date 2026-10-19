@@ -16,7 +16,7 @@ Single source of truth for how GeeksFinder looks, moves and speaks. Read before 
 - Telegram bot: @GeeksFinderBot · channel: GeeksFinder Jobs.
 - Audience: Indian final-year students/freshers, Android, mid-range phones, 4G, live in Telegram/WhatsApp, distrust scammy portals.
 - Core promise: Wake up to jobs that fit your resume, and apply to each one with a resume that fits the job.
-- Message order: 1) matched jobs every morning on Telegram 2) one-click resume tailoring 3) HR email in one click 4) ₹10 per 15 days, cancel from your UPI app.
+- Message order: 1) matched jobs every morning on Telegram 2) one-click resume tailoring 3) HR email in one click 4) ₹10 per 15 days (or ₹20 a month), cancel from your UPI app.
 - Personality: specific not hype · calm not urgent · honest (no guaranteed jobs) · plain English not HR jargon.
 - **Signature: the highlighter.** A yellow mark showing where a resume meets a job — only on matched skills, newly tailored resume lines and the hero animation.
 
@@ -106,7 +106,7 @@ Reduced motion: final frame instantly, crossfades < 150 ms, no hero sequence.
 - **Highlighter**: highlight bg, r4, -1deg skew pseudo-element, 2 px h-padding. Never the only signal (check icon + sr "matched").
 - **TelegramAlertPreview**: neutral phone frame, "Good morning, Priya", 3 job rows with %, inline "Tailor resume" / "Open job".
 - **ResumeDiff**: 2 columns desktop (Before / Tailored), toggle on mobile. Source Serif 4 on white A4 sheet, 1 px border. Old line struck in ink-3, new line highlighted. "Accept all", per-line "Undo", "Download PDF".
-- **PricingBlock**: Free and Pro; Pro has 2 px action border. "₹10" large + "every 15 days". Under button: "7-day free trial · Autopay via UPI · Cancel anytime from your UPI app".
+- **PricingBlock**: Fresher (free) and Hustle; Hustle has 2 px action border and two period tiles, "Every 15 days ₹10" and "Monthly ₹20". "₹10" large + "every 15 days". Under button: "7-day free trial · Autopay via UPI · Cancel anytime from your UPI app".
 - **Tracker**: 5 columns Saved/Applied/Interview/Offer/Rejected, paper-2 bands, compact rows; mobile segmented control.
 - **Toast**: bottom-centre mobile, bottom-right desktop, 4 s, verb-matched ("Resume tailored"). Empty state: one sentence + one button.
 
@@ -119,7 +119,7 @@ Blog: index = featured article + list rows (title, summary, topic, date), no sto
 
 ## WhatsApp
 - No WhatsApp logo. Write "WhatsApp"; Lucide message-circle only where an icon is needed.
-- Pricing: two plans stay. Pro card has a checkbox row "Add WhatsApp alerts · +₹19" that switches the price to "₹29 every 15 days".
+- Pricing: two plans stay (Fresher and Hustle). The Hustle card has a checkbox row "Add WhatsApp alerts · +₹19" (+₹39 on Monthly) that switches the price to "₹29 every 15 days" or "₹59 a month". Until WhatsApp alerts are on sale the row is disabled with "Coming soon" in ink-3.
 - Connect panel: like Connect Telegram. +91 phone field, consent checkbox with the exact consent copy, primary "Send code", then a 6-digit field and primary "Verify".
 - Chip: grey "WhatsApp not connected" → success "WhatsApp connected"; warning "WhatsApp paused" with the fix.
 

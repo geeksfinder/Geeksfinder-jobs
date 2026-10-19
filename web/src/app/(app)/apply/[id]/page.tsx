@@ -1,4 +1,5 @@
 import { ChevronDown, ExternalLink } from "lucide-react";
+import { featureTier } from "@/lib/pricing";
 import { notFound } from "next/navigation";
 import { CompanyLogo } from "@/components/ui/CompanyLogo";
 import { Badge, SkillChip } from "@/components/ui/Highlighter";
@@ -59,7 +60,7 @@ export default async function ApplyPage({ params, searchParams }: { params: Prom
         )}
       </header>
 
-      <JobActions jobId={job.id} applyUrl={job.apply_url} plan={(u?.plan ?? "free") as "free" | "pro"} initialTab={tab === "email" ? "email" : "tailor"} />
+      <JobActions jobId={job.id} applyUrl={job.apply_url} plan={featureTier(u?.plan)} initialTab={tab === "email" ? "email" : "tailor"} />
 
       {blocks.length > 0 && (
         <details className="group mt-10 border-t border-line pt-6">

@@ -46,7 +46,7 @@ export async function middleware(request: NextRequest) {
   if (!data.user && !isAdmin && PROTECTED.some((p) => path === p || path.startsWith(`${p}/`))) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
-    // Keep the query (e.g. /billing?plan=season) so the student lands back on what they picked
+    // Keep the query (e.g. /billing?plan=pro_30) so the student lands back on what they picked
     url.search = `?next=${encodeURIComponent(path + request.nextUrl.search)}`;
     return NextResponse.redirect(url);
   }

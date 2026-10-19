@@ -8,6 +8,7 @@ import { ButtonLink } from "@/components/ui/Button";
 import { PricingBlock } from "@/components/ui/PricingBlock";
 import { ResumeDiff } from "@/components/ui/ResumeDiff";
 import { JsonLd, faqSchema, orgSchema, websiteSchema } from "@/lib/seo";
+import { whatsappOnSale } from "@/lib/whatsapp/on-sale";
 import { FAQ, SAMPLE_DIFF } from "@/lib/sample";
 
 export const metadata: Metadata = {
@@ -70,6 +71,7 @@ export default function Landing() {
             <h2 className="mb-8 text-h2 font-semibold md:text-h2-lg">Less than a cup of chai every two weeks.</h2>
             <PricingBlock
               freeAction={<ButtonLink href={UPLOAD} variant="secondary" className="w-full">Start free</ButtonLink>}
+              whatsappOnSale={whatsappOnSale()}
             />
           </div>
         </section>

@@ -489,7 +489,7 @@ async function followUps() {
 async function downgradeExpired() {
   const { data } = await db.from("subscriptions").select("user_id").in("status", ["cancelled", "completed", "halted", "expired"]).lt("current_period_end", new Date().toISOString());
   const ids = (data ?? []).map((r) => r.user_id);
-  if (ids.length) await db.from("users").update({ plan: "free" }).in("id", ids).eq("plan", "pro");
+  if (ids.length) await db.from("users").update({ plan: "free" }).in("id", ids).in("plan", ["pro", "pro_wa"]);
 }
 
 /**

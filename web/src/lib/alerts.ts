@@ -40,7 +40,7 @@ export async function sendTelegramAlert(chatId: number | string, o: { name?: str
     await sleep(60); // ≤ ~16 msg/s, well under Telegram's limit
   }
   if (o.plan !== "pro") {
-    await sendTelegram(chatId, "Get alerts <b>daily</b> and HR emails with a paid plan — from ₹10 every 15 days, or ₹199 a year. Cancel anytime from your UPI app.", [
+    await sendTelegram(chatId, "Get alerts <b>daily</b> and HR emails with a paid plan — from ₹10 every 15 days or ₹20 a month. Cancel anytime from your UPI app.", [
       [{ text: "Try free for 7 days", url: `${o.app}/billing` }],
     ]);
   }
@@ -71,7 +71,7 @@ export function alertEmailHtml(matches: AlertMatch[], o: { plan: string; unsubsc
   const upsell =
     o.plan === "pro"
       ? ""
-      : `<p style="background:#F5F7FA;padding:12px 14px;border-radius:10px;color:#4A5568;font-size:14px">Get daily alerts and HR emails with <a href="${o.app}/billing" style="color:#2457D6">a paid plan — from ₹10 every 15 days, or ₹199 a year</a>. Cancel anytime from your UPI app.</p>`;
+      : `<p style="background:#F5F7FA;padding:12px 14px;border-radius:10px;color:#4A5568;font-size:14px">Get daily alerts and HR emails with <a href="${o.app}/billing" style="color:#2457D6">a paid plan — from ₹10 every 15 days or ₹20 a month</a>. Cancel anytime from your UPI app.</p>`;
   return `<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:auto;color:#14213D">
     <p style="font-size:20px;font-weight:700;margin:0 0 4px">GeeksFinder</p>
     <h1 style="font-size:22px;margin:16px 0 4px">Your top matches</h1>

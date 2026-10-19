@@ -4,7 +4,7 @@ import { adminClient } from "@/lib/supabase/admin";
 import { verifyWebhook } from "@/lib/razorpay";
 import { sendTelegram } from "@/lib/telegram";
 import { sendEmail } from "@/lib/email";
-import { PLANS, planFromRazorpayId, type PaidPlan } from "@/lib/pricing";
+import { DEFAULT_PLAN, PLANS, isPaidPlan, planFromRazorpayId, planTier, type PaidPlan } from "@/lib/pricing";
 import { log } from "@/lib/security";
 
 type Sub = { id: string; status: string; plan_id?: string; current_end?: number | null; notes?: { user_id?: string } };
@@ -35,9 +35,11 @@ export async function POST(request: Request) {
   const userId = row?.user_id ?? sub.notes?.user_id;
   if (!userId) return NextResponse.json({ ok: true });
 
-  const setPlan = (plan: "free" | "pro") => admin.from("users").update({ plan }).eq("id", userId);
+  const setPlan = (plan: "free" | "pro" | "pro_wa") => admin.from("users").update({ plan }).eq("id", userId);
   // Razorpay's plan_id is the authority on what was bought; fall back to what checkout recorded
-  const planCode: PaidPlan = planFromRazorpayId(sub.plan_id) ?? (row?.plan_code as PaidPlan | null) ?? "hustle";
+  const planCode: PaidPlan = planFromRazorpayId(sub.plan_id) ?? (isPaidPlan(row?.plan_code) ? row.plan_code : DEFAULT_PLAN);
+  // Hustle + WhatsApp sets users.plan = "pro_wa", which plan_limits entitles to WhatsApp
+  const paid = planTier(planCode);
   const plan = PLANS[planCode];
   const update = (fields: Record<string, unknown>) =>
     admin.from("subscriptions").update({ status: sub.status, plan_code: planCode, ...fields }).eq("razorpay_subscription_id", sub.id);
@@ -47,7 +49,7 @@ export async function POST(request: Request) {
     case "subscription.authenticated": // mandate set up on day 1 → trial access
     case "subscription.activated":
       await update({ current_period_end: row?.current_period_end ?? row?.trial_end ?? new Date(Date.now() + 7 * DAY).toISOString() });
-      await setPlan("pro");
+      await setPlan(paid);
       break;
 
     case "subscription.charged": {
@@ -60,7 +62,7 @@ export async function POST(request: Request) {
           { onConflict: "razorpay_payment_id" },
         );
       }
-      await setPlan("pro");
+      await setPlan(paid);
       break;
     }
 

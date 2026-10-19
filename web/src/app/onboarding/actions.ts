@@ -1,6 +1,7 @@
 "use server";
 
 import { randomBytes } from "crypto";
+import { featureTier } from "@/lib/pricing";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { matchNow } from "@/lib/match-now";
@@ -57,7 +58,7 @@ export async function saveAlerts(input: z.input<typeof AlertsBody>): Promise<Res
   const parsed = AlertsBody.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Pick how often and where." };
   const { data: u } = await supabase.from("users").select("plan").eq("id", user.id).single();
-  const plan = (u?.plan ?? "free") as "free" | "pro";
+  const plan = featureTier(u?.plan);
   const { frequency, channels, alert_hour, quiet_start, quiet_end } = parsed.data;
   const { error } = await supabase
     .from("alert_settings")

@@ -37,7 +37,7 @@ export const SAMPLE_DIFF: DiffLine[] = [
 export const FAQ = [
   {
     q: "Is it really ₹10?",
-    a: "Yes. Hustle is ₹10 every 15 days. Prefer fewer debits? Season is ₹59 every 3 months and Year Pass is ₹199 a year (about ₹17 a month). All paid plans have the same features. Fresher, the free plan, stays free with weekly alerts and one tailored resume.",
+    a: "Yes. Hustle is ₹10 every 15 days, or ₹20 a month if you prefer one debit a month. Same features either way. Fresher, the free plan, stays free with weekly alerts and one tailored resume.",
   },
   {
     q: "How does autopay work?",

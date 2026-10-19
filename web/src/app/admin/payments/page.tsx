@@ -5,9 +5,14 @@ import { AdminTable, Th } from "@/components/admin/Table";
 import { requireAdmin } from "@/lib/admin/auth";
 import { AREA_ROLES } from "@/lib/admin/constants";
 import { shortDate } from "@/lib/format";
-import { PAID_PLANS, PLANS, isPaidPlan } from "@/lib/pricing";
+import { DEFAULT_PLAN, PAID_PLANS, PLANS, isPaidPlan } from "@/lib/pricing";
 
 export const dynamic = "force-dynamic";
+
+const planLabel = (code: string | null) => {
+  const p = PLANS[isPaidPlan(code) ? code : DEFAULT_PLAN];
+  return `${p.name} · ₹${p.price} ${p.every}`;
+};
 
 type Sub = { user_id: string; status: string | null; plan_code: string | null; current_period_end: string | null; trial_end: string | null; created_at: string };
 
@@ -27,7 +32,7 @@ export default async function Payments() {
   const live = all.filter((s) => s.status === "active" || s.status === "authenticated");
   // Monthly equivalent of every active mandate, from the plan's price and period
   const mrr = live.filter((s) => s.status === "active").reduce((sum, s) => {
-    const p = PLANS[isPaidPlan(s.plan_code) ? s.plan_code : "hustle"];
+    const p = PLANS[isPaidPlan(s.plan_code) ? s.plan_code : DEFAULT_PLAN];
     return sum + (p.price * 30) / p.days;
   }, 0);
   const halted = all.filter((s) => s.status === "halted" || s.status === "pending");
@@ -55,12 +60,12 @@ export default async function Payments() {
       </MetricGrid>
 
       <h2 className="mb-3 mt-10 text-h3 font-semibold">Plan mix</h2>
-      <dl className="panel grid grid-cols-2 divide-x divide-line sm:grid-cols-4">
+      <dl className="panel grid grid-cols-2 divide-x divide-line sm:grid-cols-5">
         <div className="px-4 py-3"><dt className="text-small text-ink-2">Free</dt><dd className="tabular text-h3 font-semibold">{Math.max(0, (users ?? 0) - live.length)}</dd></div>
         {PAID_PLANS.map((p) => (
           <div key={p} className="px-4 py-3">
             <dt className="text-small text-ink-2">{PLANS[p].name} · ₹{PLANS[p].price} {PLANS[p].every}</dt>
-            <dd className="tabular text-h3 font-semibold">{live.filter((s) => (isPaidPlan(s.plan_code) ? s.plan_code : "hustle") === p).length}</dd>
+            <dd className="tabular text-h3 font-semibold">{live.filter((s) => (isPaidPlan(s.plan_code) ? s.plan_code : DEFAULT_PLAN) === p).length}</dd>
           </div>
         ))}
       </dl>
@@ -70,7 +75,7 @@ export default async function Payments() {
         {halted.map((s) => (
           <tr key={s.user_id}>
             <td>{who(s.user_id)}</td>
-            <td>{PLANS[isPaidPlan(s.plan_code) ? s.plan_code : "hustle"].name}</td>
+            <td>{planLabel(s.plan_code)}</td>
             <td className="text-warning">{s.status}</td>
             <td className="text-right">{canRemind && <AdminAction action="/api/admin/payments/remind" label="Resend payment reminder" success="Reminder sent" variant="text" extra={{ user_id: s.user_id }} inline />}</td>
           </tr>
@@ -90,7 +95,7 @@ export default async function Payments() {
           <h2 className="mb-3 text-h3 font-semibold">Trials ending this week</h2>
           <AdminTable head={<><Th>Student</Th><Th>Plan</Th><Th>Trial ends</Th></>} empty={!trialsEnding.length && "No trials end this week."}>
             {trialsEnding.map((s) => (
-              <tr key={s.user_id}><td>{who(s.user_id)}</td><td>{PLANS[isPaidPlan(s.plan_code) ? s.plan_code : "hustle"].name}</td><td className="tabular text-ink-2">{shortDate(s.trial_end!)}</td></tr>
+              <tr key={s.user_id}><td>{who(s.user_id)}</td><td>{planLabel(s.plan_code)}</td><td className="tabular text-ink-2">{shortDate(s.trial_end!)}</td></tr>
             ))}
           </AdminTable>
         </section>
@@ -98,7 +103,7 @@ export default async function Payments() {
           <h2 className="mb-3 text-h3 font-semibold">Mandates started, not authorised</h2>
           <AdminTable head={<><Th>Student</Th><Th>Plan</Th><Th>Started</Th></>} empty={!notAuthorised.length && "None waiting."}>
             {notAuthorised.map((s) => (
-              <tr key={s.user_id}><td>{who(s.user_id)}</td><td>{PLANS[isPaidPlan(s.plan_code) ? s.plan_code : "hustle"].name}</td><td className="tabular text-ink-2">{shortDate(s.created_at)}</td></tr>
+              <tr key={s.user_id}><td>{who(s.user_id)}</td><td>{planLabel(s.plan_code)}</td><td className="tabular text-ink-2">{shortDate(s.created_at)}</td></tr>
             ))}
           </AdminTable>
         </section>

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { featureTier } from "@/lib/pricing";
 import { FilterBar, type Filters } from "@/components/app/FilterBar";
 import { SaveButton } from "@/components/app/SaveButton";
 import { ButtonLink } from "@/components/ui/Button";
@@ -34,7 +35,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     supabase.from("applications").select("job_id, stage").eq("user_id", user!.id),
     jobFacets(),
   ]);
-  const plan = (u?.plan ?? "free") as "free" | "pro";
+  const plan = featureTier(u?.plan);
   const { data: usage } = await supabase.from("usage").select("tailor_count").eq("user_id", user!.id).eq("period_start", periodStart(plan, sub?.current_period_end)).maybeSingle();
   const savedIds = new Set((tracked ?? []).map((s) => s.job_id));
   const applied = (tracked ?? []).filter((t) => t.stage !== "saved").length;

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getFlag } from "@/lib/admin/flags";
+import { featureTier } from "@/lib/pricing";
 import { alertEmailHtml, alertEmailSubject, canSendTestAlert, sendTelegramAlert, type AlertMatch } from "@/lib/alerts";
 import { sendEmail } from "@/lib/email";
 import { rateLimit } from "@/lib/ratelimit";
@@ -40,10 +41,10 @@ export async function POST(request: Request) {
   try {
     let ok: boolean;
     if (body.channel === "telegram") {
-      ok = await sendTelegramAlert(u!.telegram_chat_id!, { name: u?.name, plan: u?.plan ?? "free", matches, app, test: true });
+      ok = await sendTelegramAlert(u!.telegram_chat_id!, { name: u?.name, plan: featureTier(u?.plan), matches, app, test: true });
     } else {
       const unsub = unsubscribeUrl(app, user.id);
-      const html = alertEmailHtml(matches, { plan: u?.plan ?? "free", unsubscribeUrl: unsub, app, test: true });
+      const html = alertEmailHtml(matches, { plan: featureTier(u?.plan), unsubscribeUrl: unsub, app, test: true });
       ok = await sendEmail(user.email!, alertEmailSubject(matches.length, true), html, { unsubscribeUrl: unsub });
     }
     if (!ok) return NextResponse.json({ error: body.channel === "telegram" ? "Telegram didn't accept the message. Press Start in the bot, then try again." : "The email didn't send. Try again in a few minutes." }, { status: 502 });

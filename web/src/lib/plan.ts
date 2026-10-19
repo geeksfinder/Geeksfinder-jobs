@@ -10,7 +10,7 @@ const CYCLE = 15 * 86_400_000;
 
 /**
  * Quotas reset every 15 days on every paid plan. Windows are counted back from the billing period end,
- * so Hustle's window is its whole period and Season/Year Pass get a fresh window every 15 days inside theirs.
+ * so the 15-day plan's window is its whole period and the monthly plan gets a fresh window every 15 days inside its month.
  * Free users get a lifetime count.
  */
 export function periodStart(plan: "free" | "pro", periodEnd?: string | null, now = Date.now()) {

@@ -1,7 +1,8 @@
 import { LIMITS, periodStart } from "@/lib/plan";
-import { isPaidPlan, PLANS, planName } from "@/lib/pricing";
+import { isPaidPlan, PLANS, planName, featureTier } from "@/lib/pricing";
 import { longDate, shortDate } from "@/lib/format";
 import { requireUser } from "@/lib/supabase/server";
+import { whatsappOnSale } from "@/lib/whatsapp/on-sale";
 import { BillingActions } from "./BillingActions";
 
 export const metadata = { title: "Billing" };
@@ -14,13 +15,13 @@ export default async function Billing({ searchParams }: { searchParams: Promise<
     supabase.from("subscriptions").select("*").eq("user_id", user!.id).maybeSingle(),
     supabase.from("payments").select("id, amount, status, paid_at").eq("user_id", user!.id).order("paid_at", { ascending: false }).limit(12),
   ]);
-  const plan = (u?.plan ?? "free") as "free" | "pro";
+  const plan = featureTier(u?.plan);
   const { data: usage } = await supabase.from("usage").select("tailor_count, finder_count").eq("user_id", user!.id).eq("period_start", periodStart(plan, sub?.current_period_end)).maybeSingle();
   const active = !!sub?.status && ["authenticated", "active", "pending"].includes(sub.status);
   const inTrial = !!sub?.trial_end && new Date(sub.trial_end) > new Date();
   const nextDebit = inTrial ? sub?.trial_end : sub?.current_period_end;
   const code: unknown = sub?.plan_code;
-  const bought = isPaidPlan(code) ? PLANS[code] : PLANS.hustle;
+  const bought = isPaidPlan(code) ? PLANS[code] : PLANS.pro_15;
 
   return (
     <>
@@ -28,7 +29,7 @@ export default async function Billing({ searchParams }: { searchParams: Promise<
 
       <section className="mt-6 panel p-5 md:p-6">
         <p className="text-small text-ink-2">Current plan</p>
-        <p className="text-h2 font-semibold">{planName(plan, sub?.plan_code)}{plan === "pro" && inTrial && active ? " · free trial" : ""}</p>
+        <p className="text-h2 font-semibold">{planName(u?.plan, sub?.plan_code)}{isPaidPlan(code) && plan === "pro" ? ` · ₹${bought.price} ${bought.every}` : ""}{plan === "pro" && inTrial && active ? " · free trial" : ""}</p>
         {active && nextDebit && (
           <p className="mt-4 text-h3 font-semibold md:text-h2">
             Next debit <span className="tabular">₹{bought.price}</span> on {shortDate(nextDebit)}
@@ -45,7 +46,7 @@ export default async function Billing({ searchParams }: { searchParams: Promise<
         </p>
       </section>
 
-      <BillingActions active={active} initialPlan={isPaidPlan(wanted) ? wanted : undefined} />
+      <BillingActions active={active} initialPlan={isPaidPlan(wanted) ? wanted : undefined} whatsappOnSale={whatsappOnSale()} />
 
       {active && (
         <section className="mt-10">

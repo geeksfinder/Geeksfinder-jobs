@@ -13,7 +13,7 @@ export default function Terms() {
         <li>We never apply on your behalf. The Apply button opens the original listing.</li>
         <li>Tailored resumes only rephrase your own content. Review every change; you&apos;re responsible for what you submit.</li>
         <li>You send HR emails yourself, from your own email account. Don&apos;t spam recruiters. We limit you to 15 HR emails a day.</li>
-        <li>Paid plans are billed by UPI Autopay after a 7-day free trial: Hustle ₹10 every 15 days, Season ₹59 every 3 months, Year Pass ₹199 a year. See the <Link href="/refund-policy">refund policy</Link> for cancellation and refunds.</li>
+        <li>Paid plans are billed by UPI Autopay after a 7-day free trial: Hustle ₹10 every 15 days or ₹20 a month; with WhatsApp alerts, ₹29 every 15 days or ₹59 a month. See the <Link href="/refund-policy">refund policy</Link> for cancellation and refunds.</li>
         <li>Don&apos;t misuse the service — for example by harvesting HR contacts, automating requests, or uploading files that aren&apos;t your resume. We may suspend accounts that do.</li>
       </ol>
     </LegalPage>

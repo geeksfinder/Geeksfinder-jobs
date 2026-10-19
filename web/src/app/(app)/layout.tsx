@@ -19,7 +19,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <ToastProvider>
-      <AppNav planLabel={planName((u?.plan ?? "free") as "free" | "pro", sub?.plan_code)} isAdmin={!!adminRow} />
+      <AppNav planLabel={planName(u?.plan, sub?.plan_code)} isAdmin={!!adminRow} />
       <div className="min-h-screen pb-20 md:pb-0 md:pl-60">
         <main className="mx-auto max-w-[60rem] px-4 py-6 md:px-8 md:py-10">{children}</main>
       </div>

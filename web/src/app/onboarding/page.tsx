@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { featureTier } from "@/lib/pricing";
 import { ToastProvider } from "@/components/ui/Toast";
 import { Wordmark } from "@/components/ui/Wordmark";
 import { requireUser } from "@/lib/supabase/server";
@@ -33,7 +34,7 @@ export default async function Onboarding() {
             channels: a?.channels ?? ["telegram"],
             alertHour: a?.alert_hour ?? 7,
             telegramConnected: !!u?.telegram_chat_id,
-            plan: (u?.plan ?? "free") as "free" | "pro",
+            plan: featureTier(u?.plan),
           }}
         />
       </main>
