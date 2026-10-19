@@ -22,7 +22,6 @@ export function SiteFooter() {
       <div className="wrap flex flex-col gap-6 py-10 md:flex-row md:items-start md:justify-between">
         <div>
           <Wordmark />
-          <p className="mt-1 max-w-sm text-small text-ink-2">We never scrape LinkedIn or apply on your behalf. You apply yourself.</p>
         </div>
         <nav aria-label="Footer" className="flex flex-wrap gap-x-6 gap-y-1">
           {LINKS.map((l) => (
