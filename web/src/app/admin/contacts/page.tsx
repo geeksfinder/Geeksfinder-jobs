@@ -35,7 +35,7 @@ export default async function Contacts({ searchParams }: { searchParams: Promise
                 <td className="px-4 py-3">
                   {c.do_not_contact ? <Badge tone="warning">{c.opted_out_at ? `Opted out ${shortDate(c.opted_out_at)}` : "Do not contact"}</Badge> : <Badge>Visible</Badge>}
                 </td>
-                <td className="px-4 py-3"><ContactToggle id={c.id} flagged={!!c.do_not_contact} /></td>
+                <td className="px-4 py-3">{c.opted_out_at || c.source === "hr opt-out" || c.source === "hr removal request" ? null : <ContactToggle id={c.id} flagged={!!c.do_not_contact} />}</td>
               </tr>
             ))}
           </tbody>

@@ -34,3 +34,7 @@ export const unauthorized = () => NextResponse.json({ error: "Please sign in aga
 export const badRequest = (message = "That request didn't look right.") => NextResponse.json({ error: message }, { status: 400 });
 export const tooMany = (retryAfter = 60) =>
   NextResponse.json({ error: "Too many requests. Wait a minute and try again." }, { status: 429, headers: { "Retry-After": String(retryAfter) } });
+
+/** Error shape for the WhatsApp and admin APIs (SPEC.md §3): `{ error: { code, message } }`, the message saying how to fix it. */
+export const apiError = (status: number, code: string, message: string, headers?: Record<string, string>) =>
+  NextResponse.json({ error: { code, message } }, { status, headers });

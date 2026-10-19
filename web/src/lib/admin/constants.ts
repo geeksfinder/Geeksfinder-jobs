@@ -7,14 +7,27 @@
 export const ADMIN_ROLES = ["owner", "ops", "marketing", "reviewer"] as const;
 export type AdminRole = (typeof ADMIN_ROLES)[number];
 
-/** Who may open each existing admin area. Owners can do everything. */
+/** Who may open each admin area or call each admin route (SPEC.md §4 roles, §5 Admin API). Owners can do everything. */
 export const AREA_ROLES = {
   overview: ["owner", "ops", "marketing"],
-  drafts: ["owner", "marketing", "reviewer"],
+  users: ["owner", "ops"],
+  // Marketing grants Pro days (up to 30) from the ambassador and referral tools
+  grant: ["owner", "ops", "marketing"],
+  userActions: ["owner", "ops"],
+  deleteData: ["owner"],
   contacts: ["owner", "ops"],
+  dnc: ["owner", "ops"],
+  payments: ["owner", "ops"],
+  remind: ["owner", "ops"],
+  drafts: ["owner", "marketing", "reviewer"],
+  system: ["owner"],
   flags: ["owner"],
   spendCaps: ["owner"],
+  roles: ["owner"],
 } as const satisfies Record<string, readonly AdminRole[]>;
+
+/** Most Pro days a Marketing admin may grant at once. */
+export const MARKETING_GRANT_MAX_DAYS = 30;
 
 /** Kill switches (SPEC.md §5). */
 export const FLAGS = [

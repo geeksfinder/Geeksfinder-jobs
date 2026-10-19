@@ -117,9 +117,23 @@ Dashboard: sidebar/bottom tabs Matches, Tracker, Resumes, Alerts, Billing. Filte
 Billing: "Next debit ₹10 on 29 Oct" large, payment history, plain "How to cancel" steps + cancel button.
 Blog: index = featured article + list rows (title, summary, topic, date), no stock thumbnails. Article = 680 px column, Source Serif 4 19/32, byline "GeeksFinder Desk, reviewed by <name>", "What this means for freshers" paper-2 box with left highlight bar, 3 live job rows, numbered sources.
 
+## WhatsApp
+- No WhatsApp logo. Write "WhatsApp"; Lucide message-circle only where an icon is needed.
+- Pricing: two plans stay. Pro card has a checkbox row "Add WhatsApp alerts · +₹19" that switches the price to "₹29 every 15 days".
+- Connect panel: like Connect Telegram. +91 phone field, consent checkbox with the exact consent copy, primary "Send code", then a 6-digit field and primary "Verify".
+- Chip: grey "WhatsApp not connected" → success "WhatsApp connected"; warning "WhatsApp paused" with the fix.
+
+## Admin
+- Desktop-first shell, 240 px sidebar: Overview, Operations, Money, Growth, Content, System. Usable at 768 px; no mobile tabs.
+- Numbers in tabular figures with the target in ink-3 beside them; warning or danger colour only when off target.
+- Flat tables with sticky headers, sortable, 50 rows per page; phones always masked.
+- Charts: Recharts with tokens, lazy-loaded in /admin only; lines for trends, bars for the funnel, no pies.
+- Kill switches: danger text buttons with a type-to-confirm dialog.
+- Empty: "No data yet" plus when data will appear.
+
 ## Copy
 Helpful senior to junior. Sentence case. Buttons say what happens; toasts reuse the verb. Numbers over adjectives. Never promise outcomes. Money copy explicit. Errors say what happened + fix, no apology. No exclamation marks except after payment success.
-Use: Matches, Tailor resume, Email HR, Cancel anytime from your UPI app, Fresher-friendly. Avoid: Opportunities, Optimise with AI, Outreach, Hassle-free, Entry-level talent.
+Use: Matches, Tailor resume, Email HR, Cancel anytime from your UPI app, Fresher-friendly, Add WhatsApp alerts, WhatsApp connected, Send code, Verify, Switch to Pro from next cycle. Toasts: "Code sent", "WhatsApp connected", "WhatsApp alerts off", "Saved", "Sends paused", "Sends resumed". Avoid: Opportunities, Optimise with AI, Outreach, Hassle-free, Entry-level talent.
 
 ## Accessibility & performance
 WCAG 2.2 AA; visible focus ring; 44×44 tap targets; real labels, aria-describedby for errors; reduced motion.

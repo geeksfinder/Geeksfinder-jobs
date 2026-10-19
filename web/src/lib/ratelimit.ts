@@ -13,6 +13,9 @@ const RULES = {
   api: { limit: 60, window: 60 }, // general mutations per user per minute
   public: { limit: 20, window: 60 }, // public free tools per IP per minute
   testAlert: { limit: 3, window: 86_400 }, // first-day "send a test alert" per user per day
+  waStart: { limit: 3, window: 3_600 }, // WhatsApp codes per user, and per number, per hour (SPEC.md W1.2)
+  waConfirm: { limit: 10, window: 3_600 }, // WhatsApp code checks per user per hour
+  waSigFail: { limit: 10, window: 3_600 }, // forged webhook calls per hour before the owner is alerted
 } as const;
 export type Rule = keyof typeof RULES;
 

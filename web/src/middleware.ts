@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const PROTECTED = ["/dashboard", "/onboarding", "/alerts", "/tracker", "/billing", "/apply", "/resumes", "/admin"];
 // Server-to-server endpoints authenticated by signature/secret instead of cookies
-const WEBHOOKS = ["/api/telegram/webhook", "/api/razorpay/webhook"];
+const WEBHOOKS = ["/api/telegram/webhook", "/api/razorpay/webhook", "/api/whatsapp/webhook"];
 // Public, cacheable assets that never need a session (skip the Supabase auth round-trip)
 const PUBLIC_ASSETS = ["/api/logo/"];
 
@@ -40,7 +40,10 @@ export async function middleware(request: NextRequest) {
     },
   });
   const { data } = await supabase.auth.getUser();
-  if (!data.user && PROTECTED.some((p) => path === p || path.startsWith(`${p}/`))) {
+  // /admin is in PROTECTED for the noindex header only: signed-out visitors get the admin layout's 404, not a login
+  // redirect that would reveal the panel exists (SPEC.md §1)
+  const isAdmin = path === "/admin" || path.startsWith("/admin/");
+  if (!data.user && !isAdmin && PROTECTED.some((p) => path === p || path.startsWith(`${p}/`))) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     // Keep the query (e.g. /billing?plan=season) so the student lands back on what they picked

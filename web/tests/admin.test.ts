@@ -22,6 +22,7 @@ function fakeDb(tables: Record<string, unknown> = {}, opts: { error?: string } =
 
 const post = (path: string, body: unknown) =>
   new Request(`http://localhost:3000${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+const noParams = { params: Promise.resolve({} as Record<string, never>) };
 
 /** Load an admin route as a given visitor: signed out, a student, or an admin with a role. */
 async function asVisitor(role: "anon" | "student" | "owner" | "ops" | "marketing" | "reviewer") {
@@ -44,14 +45,14 @@ describe("admin routes are invisible to everyone but their roles", () => {
     for (const who of ["anon", "student", "ops", "marketing", "reviewer"] as const) {
       it(`${r.path}: ${who} gets 404 and nothing changes`, async () => {
         const db = await asVisitor(who);
-        const res = await (await r.load()).POST(post(r.path, r.body));
+        const res = await (await r.load()).POST(post(r.path, r.body), noParams);
         expect(res.status).toBe(404);
         expect(db.rpc).not.toHaveBeenCalled();
       });
     }
     it(`${r.path}: the owner's change goes through the audited SQL function`, async () => {
       const db = await asVisitor("owner");
-      const res = await (await r.load()).POST(post(r.path, r.body));
+      const res = await (await r.load()).POST(post(r.path, r.body), noParams);
       expect(res.status).toBe(200);
       expect(db.rpc).toHaveBeenCalledTimes(1);
       expect(db.rpc.mock.calls[0][0]).toMatch(/^admin_set_/);
@@ -62,7 +63,7 @@ describe("admin routes are invisible to everyone but their roles", () => {
   it("a switch only changes when its name is typed back", async () => {
     const db = await asVisitor("owner");
     const { POST } = await import("@/app/api/admin/flags/route");
-    const res = await POST(post("/api/admin/flags", { key: "whatsapp_sends", enabled: false, confirm: "whatsapp" }));
+    const res = await POST(post("/api/admin/flags", { key: "whatsapp_sends", enabled: false, confirm: "whatsapp" }), noParams);
     expect(res.status).toBe(400);
     expect((await res.json()).error.message).toMatch(/Type the switch name/);
     expect(db.rpc).not.toHaveBeenCalled();

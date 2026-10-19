@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { withCronRun, type CronContext } from "@/lib/admin/cron-run";
 import { getFlag } from "@/lib/admin/flags";
+import { resolvePlan, tier, type Grant } from "@/lib/entitlement";
 import { generateJSON, untrusted } from "@/lib/ai";
 import { sendEmail } from "@/lib/email";
 import { htmlToText, minYearsAsked } from "@/lib/jobtext";
@@ -429,11 +430,19 @@ async function notify(ctx: CronContext) {
   const emailOn = await getFlag("email_sends", db);
   if (!telegramOn) ctx.warn("telegram_sends is off: no Telegram alerts this run");
   if (!emailOn) ctx.warn("email_sends is off: no email alerts this run");
-  const { data: settings } = await db.from("alert_settings").select("user_id, frequency, channels, alert_hour, quiet_hours, last_sent_at, users(email, telegram_chat_id, plan, name)");
+  const { data: settings } = await db.from("alert_settings").select("user_id, frequency, channels, alert_hour, quiet_hours, last_sent_at, users(email, telegram_chat_id, plan, name, disabled_at)");
+  // Pro days granted by an admin count as Pro for alerts (effective plan, SPEC.md §3)
+  const nowIso = new Date().toISOString();
+  const { data: grantRows } = await db.from("pro_grants").select("user_id, starts_at, ends_at, includes_whatsapp").lte("starts_at", nowIso).gt("ends_at", nowIso);
+  const grants = new Map<string, Grant[]>();
+  for (const g of grantRows ?? []) grants.set(g.user_id, [...(grants.get(g.user_id) ?? []), g as Grant]);
   let sent = 0;
   for (const s of settings ?? []) {
-    const u = s.users as unknown as { email: string; telegram_chat_id: number | null; plan: string; name: string | null } | null;
-    if (!u || !isDue(s.frequency, u.plan, s.alert_hour ?? 7, s.last_sent_at) || inQuietHours(s.quiet_hours as string | null)) continue;
+    const raw = s.users as unknown as { email: string; telegram_chat_id: number | null; plan: string; name: string | null; disabled_at: string | null } | null;
+    // Disabled accounts get nothing
+    if (!raw || raw.disabled_at) continue;
+    const u = { ...raw, plan: tier(resolvePlan(raw.plan, grants.get(s.user_id) ?? [])) };
+    if (!isDue(s.frequency, u.plan, s.alert_hour ?? 7, s.last_sent_at) || inQuietHours(s.quiet_hours as string | null)) continue;
 
     const limit = u.plan === "pro" ? 10 : 5;
     const { data } = await db.from("matches").select("job_id, score, jobs(id, title, company, location, remote, apply_url, fresher_friendly)").eq("user_id", s.user_id).eq("notified", false).order("score", { ascending: false }).limit(limit);

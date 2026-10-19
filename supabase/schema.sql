@@ -760,3 +760,199 @@ update public.articles a set
   kind = case when d.kind = 'guide' then 'guide' else 'news' end
 from public.article_drafts d
 where d.id = a.draft_id;
+
+-- 011 — Admin overview numbers and audited role changes (SPEC.md §4 A1, §5 Admin API "roles").
+-- Service role only. The overview reads live counts until the 02:00 IST rollup into metrics_daily ships (PR 7).
+
+create or replace function public.admin_overview() returns jsonb
+language sql stable security definer set search_path = public as $$
+  with
+    ist_today as (select (date_trunc('day', now() at time zone 'Asia/Kolkata') at time zone 'Asia/Kolkata') as t),
+    ready as (select user_id from public.profiles where cardinality(skills) > 0),
+    channel as (
+      select u.id as user_id from public.users u join public.alert_settings a on a.user_id = u.id
+      where u.telegram_chat_id is not null or 'email' = any(a.channels)
+    ),
+    -- Active this week = signed in, tailored a resume, emailed HR or moved a tracker card in the last 7 days
+    active as (
+      select id as user_id from auth.users where last_sign_in_at > now() - interval '7 days'
+      union select user_id from public.tailored_resumes where created_at > now() - interval '7 days'
+      union select user_id from public.outreach where sent_at > now() - interval '7 days'
+      union select user_id from public.applications where updated_at > now() - interval '7 days'
+    )
+  select jsonb_build_object(
+    'first_signup_at', (select min(created_at) from public.users),
+    'signups', (select count(*) from public.users),
+    'signups_today', (select count(*) from public.users, ist_today where created_at >= ist_today.t),
+    'signups_7d', (select count(*) from public.users where created_at > now() - interval '7 days'),
+    'profile_ready', (select count(*) from ready),
+    'activated', (select count(*) from ready join channel using (user_id)),
+    'weekly_active', (select count(*) from active a join public.users u on u.id = a.user_id),
+    'paid', (select count(*) from public.subscriptions where status in ('active','authenticated')),
+    'paid_within_60d', (
+      select count(*) from public.subscriptions s join public.users u on u.id = s.user_id
+      where s.status in ('active','authenticated') and coalesce(s.trial_end, now()) - u.created_at <= interval '67 days'
+    ),
+    'debits_ok_30d', (select count(*) from public.payments where status = 'captured' and paid_at > now() - interval '30 days'),
+    'debits_failed_30d', (select count(*) from public.payments where status = 'failed' and paid_at > now() - interval '30 days'),
+    'halted', (select count(*) from public.subscriptions where status = 'halted'),
+    'tailored_7d', (select count(*) from public.tailored_resumes where created_at > now() - interval '7 days'),
+    'alerts_today', (select count(*) from public.alert_settings, ist_today where last_sent_at >= ist_today.t),
+    'jobs_today', (select count(*) from public.jobs, ist_today where created_at >= ist_today.t),
+    'last_job_at', (select max(created_at) from public.jobs),
+    'enrich_backlog', (select count(*) from public.jobs where not enriched),
+    'drafts_waiting', (select count(*) from public.article_drafts where status = 'draft')
+  );
+$$;
+revoke execute on function public.admin_overview() from public, anon, authenticated;
+
+-- Add, change or remove an admin. Owners only (checked in the route); never leaves the panel without an owner.
+create or replace function public.admin_set_role(p_actor uuid, p_user uuid, p_role text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare b text; owners int;
+begin
+  if p_role is not null and p_role not in ('owner','ops','marketing','reviewer') then raise exception 'unknown role %', p_role; end if;
+  select role into b from public.admin_users where user_id = p_user for update;
+  if b = 'owner' and coalesce(p_role, '') <> 'owner' then
+    select count(*) into owners from public.admin_users where role = 'owner';
+    if owners <= 1 then raise exception 'last_owner'; end if;
+  end if;
+  if p_role is null then
+    delete from public.admin_users where user_id = p_user;
+  else
+    insert into public.admin_users (user_id, role) values (p_user, p_role)
+      on conflict (user_id) do update set role = excluded.role;
+  end if;
+  insert into public.audit_log (actor_id, action, target_table, target_id, before, after)
+    values (p_actor, 'role.set', 'admin_users', p_user::text,
+            case when b is null then null else jsonb_build_object('role', b) end,
+            case when p_role is null then null else jsonb_build_object('role', p_role) end);
+  return jsonb_build_object('user_id', p_user, 'role', p_role);
+end $$;
+revoke execute on function public.admin_set_role(uuid, uuid, text) from public, anon, authenticated;
+
+-- 012 — When each subscription row was created, for "new in the last 30 days" on the admin Payments page (A11).
+-- Rows that existed before this migration get the migration time; there were none with a live mandate.
+alter table public.subscriptions add column if not exists created_at timestamptz not null default now();
+
+-- 013 — WhatsApp core (docs/whatsapp-admin/SPEC.md §6, migration B; PR 3).
+-- Adapted: subscriptions.plan_code already holds hustle / season / yearpass (migration 004), so the spec's
+-- pro / pro_wa plan_code change waits for PR 4, once the WhatsApp price per plan is decided.
+
+-- users.plan gains pro_wa (constraint name checked: users_plan_check)
+alter table public.users drop constraint if exists users_plan_check;
+alter table public.users add constraint users_plan_check check (plan in ('free','pro','pro_wa'));
+
+create table if not exists public.whatsapp_contacts (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  phone_e164 text not null check (phone_e164 ~ '^\+[1-9][0-9]{7,14}$'),
+  status text not null default 'pending' check (status in ('pending','verified')),
+  consent_at timestamptz not null,
+  consent_version text not null,
+  verified_at timestamptz,
+  opted_out_at timestamptz,
+  paused boolean not null default false,
+  fail_streak integer not null default 0,
+  last_auto_reply_at timestamptz,
+  updated_at timestamptz not null default now()
+);
+-- W1.3: a number can be verified on only one account
+create unique index if not exists whatsapp_verified_phone_uidx on public.whatsapp_contacts (phone_e164) where status = 'verified';
+
+create table if not exists public.whatsapp_otps (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  phone_e164 text not null,
+  code_hash text not null,
+  attempts integer not null default 0,
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists whatsapp_otps_user_idx on public.whatsapp_otps (user_id, created_at desc);
+
+-- Meta's prices live here, never in code. Add a new row when Meta changes prices; never edit old rows.
+create table if not exists public.wa_rate_card (
+  category text not null check (category in ('marketing','utility','authentication','service')),
+  inr_per_msg numeric(8,4) not null,
+  gst_pct numeric(5,2) not null default 18,
+  effective_from date not null,
+  primary key (category, effective_from)
+);
+insert into public.wa_rate_card (category, inr_per_msg, effective_from) values
+  ('marketing', 0.8631, '2026-10-01'),
+  ('utility', 0.1150, '2026-10-01'),
+  ('authentication', 0.1150, '2026-10-01'),
+  ('service', 0.1150, '2026-10-01')
+on conflict do nothing;
+
+create table if not exists public.wa_messages (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete set null,
+  kind text not null check (kind in ('digest','verify','stop_confirm','auto_reply')),
+  template text,
+  send_date date not null,
+  meta_message_id text unique,
+  status text not null default 'queued' check (status in ('queued','sent','delivered','read','failed')),
+  category text,
+  billable boolean,
+  cost_inr numeric(10,4) not null default 0,
+  error_code text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+-- One digest per student per IST day, even if the cron runs twice
+create unique index if not exists wa_one_digest_per_day_uidx on public.wa_messages (user_id, send_date) where kind = 'digest';
+create index if not exists wa_messages_date_idx on public.wa_messages (send_date, status);
+
+create table if not exists public.wa_inbound (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete set null,
+  phone_hash text not null,
+  body text check (char_length(body) <= 1000),
+  keyword text check (keyword in ('stop','start')),
+  meta_message_id text not null unique,
+  received_at timestamptz not null default now()
+);
+
+create table if not exists public.wa_health_snapshots (
+  id uuid primary key default gen_random_uuid(),
+  quality_rating text,
+  messaging_limit_tier text,
+  templates jsonb not null default '[]'::jsonb,
+  captured_at timestamptz not null default now()
+);
+
+alter table public.whatsapp_contacts enable row level security;
+alter table public.whatsapp_otps enable row level security;
+alter table public.wa_rate_card enable row level security;
+alter table public.wa_messages enable row level security;
+alter table public.wa_inbound enable row level security;
+alter table public.wa_health_snapshots enable row level security;
+drop policy if exists "own whatsapp contact" on public.whatsapp_contacts;
+create policy "own whatsapp contact" on public.whatsapp_contacts for select using (user_id = auth.uid());
+-- No other policies: all writes and every other read go through server routes with the service role.
+
+-- Daily cleanup also drops WhatsApp inbound messages after 90 days and spent codes after a day (SPEC.md §6 notes)
+create or replace function public.cleanup_old_data() returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare j int; n int; w int; i int;
+begin
+  delete from public.jobs jb
+   where jb.created_at < now() - interval '45 days'
+     and not exists (select 1 from public.applications a where a.job_id = jb.id)
+     and not exists (select 1 from public.tailored_resumes t where t.job_id = jb.id)
+     and not exists (select 1 from public.outreach o where o.job_id = jb.id);
+  get diagnostics j = row_count;
+  delete from public.news_items ni
+   where ni.created_at < now() - interval '30 days'
+     and (ni.cluster_id is null or not exists (select 1 from public.article_drafts d where d.cluster_id = ni.cluster_id and d.status = 'published'));
+  get diagnostics n = row_count;
+  delete from public.webhook_events where received_at < now() - interval '90 days';
+  get diagnostics w = row_count;
+  delete from public.ai_usage where day < current_date - 180;
+  delete from public.wa_inbound where received_at < now() - interval '90 days';
+  get diagnostics i = row_count;
+  delete from public.whatsapp_otps where created_at < now() - interval '1 day';
+  return jsonb_build_object('jobs', j, 'news_items', n, 'webhook_events', w, 'wa_inbound', i);
+end $$;
+revoke execute on function public.cleanup_old_data() from public, anon, authenticated;

@@ -24,5 +24,21 @@ jobs:
       - run: npm run lint
       - run: npx tsc --noEmit
       - run: npm test
+      # SPEC.md §7: only lib/whatsapp/client.ts talks to Meta, and the WhatsApp token never reaches the browser or logs
+      - name: WhatsApp stays server-side
+        run: |
+          set -e
+          if grep -rn "graph.facebook.com" src scripts --include=*.ts --include=*.tsx | grep -v "^src/lib/whatsapp/client.ts:"; then
+            echo "Only src/lib/whatsapp/client.ts may call graph.facebook.com"; exit 1
+          fi
+          if grep -rl "WHATSAPP_TOKEN" src | xargs -r grep -l '"use client"'; then
+            echo "WHATSAPP_TOKEN referenced from a client component"; exit 1
+          fi
+          if grep -rnE "console\.(log|info|warn|error|debug)\(.*WHATSAPP_TOKEN" src scripts; then
+            echo "WHATSAPP_TOKEN in a log call"; exit 1
+          fi
+          if grep -rn "NEXT_PUBLIC_WHATSAPP" src scripts .env.example; then
+            echo "WhatsApp secrets must never be NEXT_PUBLIC_*"; exit 1
+          fi
       # Fail on high/critical advisories in production dependencies (plan §7)
       - run: npm audit --omit=dev --audit-level=high

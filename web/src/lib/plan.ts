@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { effectivePlan, tier } from "./entitlement";
 
 export const LIMITS = {
   free: { tailor: 1, finder: 0, frequencies: ["weekly", "monthly"] as string[] },
@@ -19,14 +20,16 @@ export function periodStart(plan: "free" | "pro", periodEnd?: string | null, now
   return new Date(end - windowsLeft * CYCLE).toISOString().slice(0, 10);
 }
 
-/** Plan is read only from the DB (never from the request). */
+/** Plan is read only from the DB (never from the request): the paid plan or an active Pro grant, whichever is higher. */
 export async function getPlan(admin: SupabaseClient, userId: string) {
-  const [{ data: u }, { data: sub }] = await Promise.all([
-    admin.from("users").select("plan").eq("id", userId).single(),
+  const [eff, { data: sub }] = await Promise.all([
+    effectivePlan(admin, userId),
     admin.from("subscriptions").select("current_period_end").eq("user_id", userId).maybeSingle(),
   ]);
-  const plan = (u?.plan ?? "free") as "free" | "pro";
-  return { plan, period: periodStart(plan, sub?.current_period_end) };
+  const plan = tier(eff.plan);
+  // A paid plan's window follows its billing period; a grant-only student's follows the grant's end date
+  const periodEnd = eff.paidPlan === "free" ? eff.grantEndsAt : sub?.current_period_end;
+  return { plan, period: periodStart(plan, periodEnd) };
 }
 
 /** Atomic check-and-increment via the consume_usage SQL function. */

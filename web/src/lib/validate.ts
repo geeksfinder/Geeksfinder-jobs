@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { FLAGS, SPEND_PROVIDERS } from "./admin/constants";
+import { ADMIN_ROLES, FLAGS, SPEND_PROVIDERS } from "./admin/constants";
+import { PhoneSchema } from "./whatsapp/phone";
 
 /** Request body schemas. Every API route parses its body with one of these. */
 
@@ -71,6 +72,24 @@ export const SpendCapBody = z.object({
   monthly_cap_inr: z.number().min(0).max(1_000_000),
   alert_pct: z.number().int().min(1).max(100).default(80),
 });
+
+export const GrantBody = z.object({
+  days: z.number({ message: "Enter the number of days." }).int().min(1, "Grant at least 1 day.").max(365, "Grant at most 365 days."),
+  reason: z.enum(["ambassador", "referral", "support", "other"], { message: "Pick a reason." }),
+  includes_whatsapp: z.boolean().default(false),
+});
+export const EmptyBody = z.object({}).passthrough();
+export const ChannelOffBody = z.object({ channel: z.enum(["telegram", "email", "whatsapp"], { message: "Pick a channel." }) });
+export const DisableBody = z.object({ disabled: z.boolean() });
+export const DeleteDataBody = z.object({ confirm: z.literal("delete", { message: 'Type "delete" to confirm.' }) });
+const workEmail = z.string().trim().toLowerCase().email("Enter a valid email address.").max(254);
+export const DncBody = z.object({ email: workEmail, action: z.enum(["add", "remove"]), from_recruiter: z.boolean().default(false) });
+export const RoleBody = z.object({ email: workEmail, role: z.enum(ADMIN_ROLES).nullable() });
+export const RemindBody = z.object({ user_id: uuid });
+
+// WhatsApp verification (SPEC.md §3). Consent must be an explicit tick.
+export const WaStartBody = z.object({ phone: PhoneSchema, consent: z.literal(true, { message: "Tick the box to agree to WhatsApp alerts." }) });
+export const WaConfirmBody = z.object({ code: z.string().trim().regex(/^\d{6}$/, "Enter the 6-digit code from WhatsApp.") });
 
 /** Parse JSON safely; returns null on invalid JSON or schema mismatch. */
 export async function parseJson<T extends z.ZodTypeAny>(req: Request, schema: T): Promise<z.infer<T> | null> {
