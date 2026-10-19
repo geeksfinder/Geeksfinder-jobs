@@ -62,11 +62,17 @@ const KNOWN: Record<string, string> = {
 
 const DOMAIN = /^(?=.{4,80}$)([a-z0-9-]+\.)+[a-z]{2,}$/;
 
+// Applicant-tracking systems, job boards, social networks and site builders: a job often carries one of these as
+// the employer's "website", but it's never the company's own domain (wrong logo, wrong HR contacts, wrong page)
+const NOT_A_COMPANY =
+  /(^|\.)(greenhouse\.io|lever\.co|myworkdayjobs\.com|workday\.com|ashbyhq\.com|smartrecruiters\.com|linkedin\.com|naukri\.com|indeed\.(com|co\.in)|glassdoor\.(com|co\.in)|foundit\.in|monsterindia\.com|shine\.com|timesjobs\.com|internshala\.com|apna\.co|workindia\.in|wellfound\.com|angel\.co|instahyre\.com|cutshort\.io|hirist\.(com|tech)|iimjobs\.com|freshersworld\.com|justdial\.com|facebook\.com|instagram\.com|twitter\.com|x\.com|youtube\.com|google\.com|sites\.google\.com|blogspot\.com|wordpress\.com|wixsite\.com|wix\.com|godaddysites\.com|business\.site|jobs\.lever\.co|zohorecruit\.(com|in)|keka\.com|darwinbox\.in|freshteam\.com|recruitee\.com|teamtailor\.com|bamboohr\.com|breezy\.hr|jobvite\.com|icims\.com|taleo\.net|successfactors\.(com|eu)|oraclecloud\.com)$/;
+
 /** Best domain for a company's logo, or null. Strips careers./jobs. subdomains from job-board links. */
 export function logoDomain(company: string, domain?: string | null): string | null {
   const d = (domain ?? "").toLowerCase().replace(/^(?:www|careers|jobs|boards|apply|job-boards)\./, "");
-  if (DOMAIN.test(d) && !/greenhouse|lever\.co|workday|ashby|smartrecruiters/.test(d)) return d;
+  if (DOMAIN.test(d) && !NOT_A_COMPANY.test(d)) return d;
   return KNOWN[cleanCompany(company).toLowerCase()] ?? null;
 }
 
 export const isLogoDomain = (d: string) => DOMAIN.test(d);
+export const isCompanyDomain = (d: string) => DOMAIN.test(d) && !NOT_A_COMPANY.test(d);

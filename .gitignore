@@ -10,3 +10,8 @@ Screenshot_*.png
 .DS_Store
 Thumbs.db
 .vscode/
+
+# Contact lists hold people's names and emails: import them (web/scripts/import-hr-contacts.ts), never commit them
+*.xlsx
+*.xls
+*.csv

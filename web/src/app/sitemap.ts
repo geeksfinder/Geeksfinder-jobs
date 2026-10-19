@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { COMPANY_MIN_JOBS, companiesHiring } from "@/lib/company-pages";
 import { indexableHubs } from "@/lib/hubs";
 import { publicClient } from "@/lib/public-data";
 import { SITE } from "@/lib/site";
@@ -7,7 +8,7 @@ export const dynamic = "force-dynamic"; // query at request time, not at build
 export const revalidate = 86400;
 
 // Pages whose content changes with the daily job and article runs; the rest are policy pages
-const LIVE = ["", "/blog", "/jobs"];
+const LIVE = ["", "/blog", "/jobs", "/companies"];
 const STATIC = ["/tools", "/tools/ats-resume-checker", "/tools/hr-email-generator", "/about", "/editorial-policy", "/contact", "/privacy", "/terms", "/refund-policy", "/hr-opt-out"];
 // Date policy pages last changed; update when one is edited, so lastModified stays honest
 const STATIC_UPDATED = new Date("2026-10-19");
@@ -27,5 +28,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const blog = (articles ?? []).map((a) => ({ url: `${SITE.url}/blog/${a.slug}`, lastModified: new Date(a.updated_at ?? a.published_at), changeFrequency: "weekly" as const, priority: 0.7 }));
 
   const hubs = (await indexableHubs()).map(({ hub }) => ({ url: `${SITE.url}/jobs/${hub.slug}`, lastModified: now, changeFrequency: "daily" as const, priority: 0.8 }));
-  return [...core, ...blog, ...hubs];
+  const companies = (await companiesHiring())
+    .filter((c) => c.jobs >= COMPANY_MIN_JOBS)
+    .map((c) => ({ url: `${SITE.url}/companies/${c.slug}`, lastModified: now, changeFrequency: "daily" as const, priority: 0.7 }));
+  return [...core, ...blog, ...hubs, ...companies];
 }

@@ -1,8 +1,36 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getFlag } from "./admin/flags";
+import { logoDomain } from "./company";
+import { contactScore, normName, rootDomain } from "./companies";
 import { safeFetch } from "./safe-fetch";
 
-export type Contact = { email: string; name?: string; source: string };
+export type Contact = { email: string; name?: string; role?: string; source: string };
+
+// What the student sees after "found via"
+const SOURCE_LABEL: Record<string, string> = { "hr contact sheet": "an HR contact list (not verified)", hunter: "Hunter", "company website": "the company website" };
+
+/**
+ * Every email domain a company's HR may use: the job's own domain, the company's root domain, and the email domains
+ * on its companies row ("bosch.com" → also "in.bosch.com"). The row is found by domain, else by exact name alias.
+ */
+export async function companyDomains(admin: SupabaseClient, job: { company?: string | null; company_domain: string | null }): Promise<{ root: string | null; domains: string[] }> {
+  const own = job.company_domain?.replace(/^www\./, "").toLowerCase() ?? null;
+  const fromName = job.company ? logoDomain(job.company, own) : own;
+  let root = fromName ? rootDomain(fromName) : null;
+  type Row = { domain: string; email_domains: string[] };
+  let row: Row | null = null;
+  if (root) {
+    const { data } = await admin.from("companies").select("domain, email_domains").eq("domain", root).maybeSingle();
+    row = (data as Row | null) ?? null;
+  } else if (job.company && normName(job.company)) {
+    const { data } = await admin.from("companies").select("domain, email_domains").contains("aliases", [normName(job.company)]).limit(2);
+    // Two companies with the same name: don't guess
+    if (data?.length === 1) row = data[0] as Row;
+  }
+  if (row) root = row.domain;
+  const domains = [...new Set([own, fromName, root, ...(row?.email_domains ?? [])].filter(Boolean) as string[])];
+  return { root, domains };
+}
 
 const EMAIL_RE = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi;
 const HR_PREFIXES = ["careers", "hr", "jobs", "recruitment", "hiring", "talent", "people"];
@@ -15,9 +43,9 @@ const HR_PREFIXES = ["careers", "hr", "jobs", "recruitment", "hiring", "talent",
  */
 export async function findContact(
   admin: SupabaseClient,
-  job: { contact_email: string | null; company_domain: string | null },
+  job: { contact_email: string | null; company_domain: string | null; company?: string | null },
 ): Promise<Contact | null> {
-  const domain = job.company_domain?.replace(/^www\./, "") ?? null;
+  const { root: domain, domains } = await companyDomains(admin, job);
 
   const blocked = async (email: string) => {
     const { data } = await admin.from("company_contacts").select("do_not_contact").eq("email", email.toLowerCase()).eq("do_not_contact", true).limit(1);
@@ -27,15 +55,15 @@ export async function findContact(
   if (job.contact_email && !(await blocked(job.contact_email))) return { email: job.contact_email, source: "job post" };
   if (!domain) return null;
 
-  const { data: cached } = await admin
+  // Best person for a fresher among every contact on the company's domains (campus and TA first, CXOs last)
+  const { data: known } = await admin
     .from("company_contacts")
-    .select("email, name, source")
-    .eq("company_domain", domain)
+    .select("email, name, role, source, verified, quality")
+    .in("company_domain", domains)
     .eq("do_not_contact", false)
-    .order("verified", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (cached) return { email: cached.email, name: cached.name ?? undefined, source: `${cached.source} (cached)` };
+    .limit(100);
+  const best = [...(known ?? [])].sort((a, b) => contactScore(b) - contactScore(a))[0];
+  if (best) return { email: best.email, name: best.name ?? undefined, role: best.role ?? undefined, source: SOURCE_LABEL[best.source] ?? best.source };
 
   const fromSite = await scrapeSite(domain);
   if (fromSite) {

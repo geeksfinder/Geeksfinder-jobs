@@ -23,6 +23,8 @@ export default function Privacy() {
       <p>Resumes are stored in a private bucket. Links to view them expire after 10 minutes. Each account can only read its own data. Secrets and keys never reach your browser.</p>
       <h2>Sharing</h2>
       <p>We never sell your data or our HR contact list. We share data only with the providers needed to run GeeksFinder: Supabase, Vercel, Google, Groq, Telegram, Brevo and Razorpay.</p>
+      <h2>Recruiter contact details</h2>
+      <p>To help students reach the right person, we hold work email addresses of company HR and talent teams, with a name and job title where known. They come from job posts, company websites, Hunter.io and HR contact lists compiled from public sources. We never store recruiters&apos; phone numbers or personal email addresses, never publish or export the list, and show a student one address only when they apply to that company&apos;s job. Recruiters can stop this at any time on the <Link href="/hr-opt-out">recruiter opt-out page</Link>.</p>
       <h2>Your rights</h2>
       <p>View and edit your profile any time on the Resumes page. Delete your account from <Link href="/alerts">Alerts → Delete my account</Link> — this removes your profile, resumes, matches and HR email history. To withdraw consent or raise a complaint, email <a href={`mailto:${SITE.contactEmail}`}>{SITE.contactEmail}</a>.</p>
     </LegalPage>

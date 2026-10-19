@@ -1,6 +1,7 @@
 import { unstable_cache } from "next/cache";
 import type { JobCardJob } from "@/components/ui/JobCard";
 import { FRESH, JOB_COLS, publicClient } from "./public-data";
+import { allRows } from "./supabase/all-rows";
 
 /**
  * Job hubs (SEO plan §8) at three levels: role in a city, a role across India, and every fresher job in a city.
@@ -141,8 +142,11 @@ export const hubCounts = unstable_cache(
   async (): Promise<[string, number][]> => {
     const db = publicClient();
     if (!db) return [];
-    const { data } = await db.from("jobs").select("title, location, remote").eq("fresher_friendly", true).gte("created_at", FRESH()).limit(10000);
-    return [...countHubs(data ?? [])];
+    const since = FRESH();
+    const data = await allRows<{ title: string; location: string | null; remote: boolean | null }>((a, b) =>
+      db.from("jobs").select("title, location, remote").eq("fresher_friendly", true).gte("created_at", since).order("id").range(a, b),
+    );
+    return [...countHubs(data)];
   },
   ["hub-counts-v2"],
   { revalidate: 3600 },

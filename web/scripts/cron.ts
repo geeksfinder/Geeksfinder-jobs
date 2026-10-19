@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { withCronRun, type CronContext } from "@/lib/admin/cron-run";
 import { getFlag } from "@/lib/admin/flags";
+import { syncJobCompanies } from "@/lib/company-sync";
 import { resolvePlan, tier, type Grant } from "@/lib/entitlement";
 import { generateJSON, untrusted } from "@/lib/ai";
 import { sendEmail } from "@/lib/email";
@@ -328,13 +329,16 @@ async function ingest(ctx: CronContext) {
     else inserted += Math.min(100, fresh.length - i);
   }
   log(`inserted ${inserted} of ${fresh.length} new jobs`);
+  // Company rows and missing company websites (logos, HR lookups and company pages key off them)
+  const companies = await syncJobCompanies(db).catch((e) => (ctx.warn(`company sync failed: ${(e as Error).message}`), { companies_changed: 0, job_domains_filled: 0 }));
+  log("companies", companies);
 
   const { enriched } = await enrich();
   const { matched } = await match();
   const { data: cleaned, error } = await db.rpc("cleanup_old_data");
   log("cleanup", error ? `failed: ${error.message}` : JSON.stringify(cleaned));
   if (error) ctx.warn(`cleanup failed: ${error.message}`);
-  return { fetched: fetched.length, kept: all.length, new: fresh.length, inserted, enriched, matched };
+  return { fetched: fetched.length, kept: all.length, new: fresh.length, inserted, enriched, matched, ...companies };
 }
 
 /** AI once per job, batched 15 per call. */

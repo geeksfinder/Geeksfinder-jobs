@@ -5,6 +5,7 @@ import { cache } from "react";
 import { PublicShell } from "@/components/landing/PublicShell";
 import { ButtonLink } from "@/components/ui/Button";
 import { JobCard } from "@/components/ui/JobCard";
+import { companiesHiring, companyLinkFinder } from "@/lib/company-pages";
 import { CITIES, HUB_MIN_JOBS, ROLES, hubCounts, hubJobs, hubName, hubSlug, hubStats, parseHub } from "@/lib/hubs";
 import { JsonLd, breadcrumbSchema, fitTitle } from "@/lib/seo";
 
@@ -36,7 +37,9 @@ export default async function HubPage({ params }: { params: Promise<{ hub: strin
   const d = await load((await params).hub);
   if (!d) notFound();
   const { hub, jobs, stats, name } = d;
-  const counts = new Map(await hubCounts());
+  const [hubCountList, hiring] = await Promise.all([hubCounts(), companiesHiring()]);
+  const counts = new Map(hubCountList);
+  const companyLink = companyLinkFinder(hiring);
   const item = (role: (typeof ROLES)[number] | null, city: (typeof CITIES)[number] | null): LinkItem => {
     const slug = hubSlug(role, city);
     return { href: `/jobs/${slug}`, label: hubName({ role, city }), count: counts.get(slug) ?? 0 };
@@ -71,7 +74,19 @@ export default async function HubPage({ params }: { params: Promise<{ hub: strin
           <div className="bg-paper p-4"><dt className="text-small text-ink-2">Posted this week</dt><dd className="tabular text-h2 font-semibold">{stats.thisWeek}</dd></div>
           <div className="col-span-2 bg-paper p-4 sm:col-span-1">
             <dt className="text-small text-ink-2">Top hiring</dt>
-            <dd className="text-body font-medium">{stats.companies.slice(0, 3).map(([c]) => c).join(", ") || "—"}</dd>
+            <dd className="text-body font-medium">
+              {stats.companies.length
+                ? stats.companies.slice(0, 3).map(([c], i) => {
+                    const slug = companyLink(c);
+                    return (
+                      <span key={c}>
+                        {i > 0 && ", "}
+                        {slug ? <Link href={`/companies/${slug}`} className="text-action underline-offset-4 hover:underline">{c}</Link> : c}
+                      </span>
+                    );
+                  })
+                : "—"}
+            </dd>
           </div>
         </dl>
 

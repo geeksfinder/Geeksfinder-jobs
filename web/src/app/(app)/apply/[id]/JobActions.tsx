@@ -8,7 +8,7 @@ import { Button, ButtonLink } from "@/components/ui/Button";
 import { ResumeDiff, type DiffLine } from "@/components/ui/ResumeDiff";
 import { useToast } from "@/components/ui/Toast";
 
-type Draft = { contact: { email: string; name?: string; source: string } | null; subject: string; email: string; linkedin_note: string };
+type Draft = { contact: { email: string; name?: string; role?: string; source: string } | null; subject: string; email: string; linkedin_note: string };
 type Err = { msg: string; upgrade?: boolean } | null;
 
 export function JobActions({ jobId, applyUrl, plan, initialTab }: { jobId: string; applyUrl: string | null; plan: "free" | "pro"; initialTab: "tailor" | "email" }) {
@@ -162,7 +162,16 @@ function EmailHR({ jobId, plan }: { jobId: string; plan: "free" | "pro" }) {
       <div className="panel space-y-4 p-5">
         {d.contact ? (
           <p className="text-body">
-            To <span className="font-semibold">{d.contact.email}</span> <span className="text-small text-ink-3">· found via {d.contact.source}</span>
+            To{" "}
+            {d.contact.name ? (
+              <>
+                <span className="font-semibold">{d.contact.name}</span>
+                {d.contact.role && <span className="text-ink-2">, {d.contact.role}</span>} <span className="text-ink-2">({d.contact.email})</span>
+              </>
+            ) : (
+              <span className="font-semibold">{d.contact.email}</span>
+            )}{" "}
+            <span className="text-small text-ink-3">· found via {d.contact.source}</span>
           </p>
         ) : (
           <p className="text-body text-warning">We couldn&apos;t find a verified HR email for this company. Send the LinkedIn note below instead.</p>

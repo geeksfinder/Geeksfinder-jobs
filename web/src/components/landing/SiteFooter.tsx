@@ -5,6 +5,7 @@ import { SITE } from "@/lib/site";
 const LINKS = [
   { href: "/jobs", label: "Fresher jobs" },
   { href: "/jobs/internship-fresher-jobs", label: "Internships" },
+  { href: "/companies", label: "Companies hiring" },
   { href: "/tools", label: "Free tools" },
   { href: "/privacy", label: "Privacy" },
   { href: "/terms", label: "Terms" },
