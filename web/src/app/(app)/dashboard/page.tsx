@@ -107,7 +107,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       </dl>
 
       {!profile?.skills?.length && (
-        <Notice href="/onboarding" cta="Upload your resume">Upload your resume so we can match jobs to your skills.</Notice>
+        <Notice href="/onboarding?upload=1" cta="Upload your resume">Upload your resume so we can match jobs to your skills.</Notice>
       )}
       {alerts?.channels?.includes("telegram") && !u?.telegram_chat_id && (
         <Notice href="/alerts" cta="Connect Telegram">Connect Telegram to get these jobs every morning.</Notice>
@@ -144,7 +144,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
           ) : (
             <EmptyState
               text={profile?.skills?.length ? "No matches yet. Add 3 more skills to widen your results." : "Upload your resume and your first matches appear after the next morning run."}
-              action={<ButtonLink href={profile?.skills?.length ? "/resumes" : "/onboarding"} variant="secondary">{profile?.skills?.length ? "Edit skills" : "Upload your resume"}</ButtonLink>}
+              action={<ButtonLink href={profile?.skills?.length ? "/resumes" : "/onboarding?upload=1"} variant="secondary">{profile?.skills?.length ? "Edit skills" : "Upload your resume"}</ButtonLink>}
             />
           )
         ) : (

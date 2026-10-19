@@ -71,6 +71,9 @@ export async function saveAlerts(input: z.input<typeof AlertsBody>): Promise<Res
     })
     .eq("user_id", user.id);
   if (error) return { ok: false, error: "Couldn't save alerts. Try again." };
+  // Saving alerts is the last setup step: from now on sign-in goes straight to the dashboard (lib/landing.ts).
+  // Written with the service role: onboarded_at isn't user-writable.
+  await adminClient().from("users").update({ onboarded_at: new Date().toISOString() }).eq("id", user.id).is("onboarded_at", null);
   revalidatePath("/alerts");
   return { ok: true };
 }

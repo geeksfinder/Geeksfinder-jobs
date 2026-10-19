@@ -28,7 +28,7 @@ export default async function Resumes() {
           <h2 className="text-h2 font-semibold">Base resume</h2>
           <div className="flex gap-2">
             {signed && <a href={signed} target="_blank" rel="noopener" className="min-h-11 content-center text-small text-action underline-offset-4 hover:underline">View uploaded PDF</a>}
-            <ButtonLink href="/onboarding" size="sm" variant="secondary">Upload a new PDF</ButtonLink>
+            <ButtonLink href="/onboarding?upload=1" size="sm" variant="secondary">Upload a new PDF</ButtonLink>
           </div>
         </div>
         {p ? (
@@ -48,7 +48,7 @@ export default async function Resumes() {
           />
         ) : (
           <p className="text-body text-ink-2">
-            No resume yet. <Link href="/onboarding" className="text-action underline-offset-4 hover:underline">Upload your resume</Link> to get started.
+            No resume yet. <Link href="/onboarding?upload=1" className="text-action underline-offset-4 hover:underline">Upload your resume</Link> to get started.
           </p>
         )}
       </section>

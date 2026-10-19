@@ -60,7 +60,8 @@ export function LoginForm() {
       return;
     }
     await fetch("/auth/consent", { method: "POST" });
-    location.href = next;
+    // replace, not push: Back from the dashboard shouldn't reopen the login form
+    location.replace(`/auth/continue?next=${encodeURIComponent(next)}`);
   }
 
   return (

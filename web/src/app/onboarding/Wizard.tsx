@@ -28,8 +28,9 @@ const STEPS = ["Upload resume", "Preferences", "Alerts", "Done"];
 const ROLE_SUGGESTIONS = ["Frontend Developer", "Software Engineer", "Data Analyst", "Full Stack Developer", "Python Developer"];
 const CITY_SUGGESTIONS = ["Remote", "Bengaluru", "Pune", "Hyderabad", "Mumbai"];
 
-export function Wizard({ initial }: { initial: Initial }) {
-  const [step, setStep] = useState(initial.skills.length ? 1 : 0);
+export function Wizard({ initial, review = false, startAtUpload = false }: { initial: Initial; review?: boolean; startAtUpload?: boolean }) {
+  const router = useRouter();
+  const [step, setStep] = useState(initial.skills.length && !startAtUpload ? 1 : 0);
   const [skills, setSkills] = useState(initial.skills);
   const [roles, setRoles] = useState(initial.roles);
   const [locations, setLocations] = useState(initial.locations.length ? initial.locations : ["Remote"]);
@@ -82,8 +83,13 @@ export function Wizard({ initial }: { initial: Initial }) {
       {step === 1 && (
         <section className="space-y-6">
           <div>
-            <h1 ref={heading} tabIndex={-1} className="text-h1 font-bold outline-none md:text-h1-lg">What jobs do you want?</h1>
-            <p className="mt-2 text-body text-ink-2">We use this to score every new job against you.</p>
+            <h1 ref={heading} tabIndex={-1} className="text-h1 font-bold outline-none md:text-h1-lg">{review ? "Welcome back. Still looking for these?" : "What jobs do you want?"}</h1>
+            <p className="mt-2 text-body text-ink-2">
+              {review ? "It's been a while. Check your roles and cities are still right, or go straight to your matches." : "We use this to score every new job against you."}
+            </p>
+            {review && (
+              <Button variant="text" className="mt-2" onClick={() => router.replace("/dashboard")}>Looks right, go to dashboard</Button>
+            )}
           </div>
           <TagInput label="Roles" values={roles} onChange={setRoles} placeholder="Frontend Developer" suggestions={ROLE_SUGGESTIONS} max={10} />
           <TagInput label="Cities" hint="Add Remote to include remote jobs." values={locations} onChange={setLocations} placeholder="Pune" suggestions={CITY_SUGGESTIONS} max={10} />
@@ -231,7 +237,8 @@ function DoneStep({ headingRef }: { headingRef: React.RefObject<HTMLHeadingEleme
           <EmptyState text="We add new jobs every morning at 6. Add more skills or cities to widen your results." action={<ButtonLink href="/resumes" variant="secondary">Edit skills</ButtonLink>} />
         )}
       </div>
-      <Button className="mt-8" variant="secondary" onClick={() => router.push("/dashboard")}>Go to dashboard</Button>
+      {/* replace: Back from the dashboard shouldn't reopen the setup steps */}
+      <Button className="mt-8" variant="secondary" onClick={() => router.replace("/dashboard")}>Go to dashboard</Button>
     </section>
   );
 }
