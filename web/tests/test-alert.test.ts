@@ -19,6 +19,7 @@ function mockUser(createdAt: string, opts: { telegram?: number | null; limited?:
       supabase: { from: () => chain({ name: "Priya", plan: "free", telegram_chat_id: opts.telegram ?? null }) },
     }),
   }));
+  vi.doMock("@/lib/admin/flags", () => ({ getFlag: async () => true }));
   vi.doMock("@/lib/ratelimit", () => ({ rateLimit: async () => ({ ok: !opts.limited, retryAfter: 60 }) }));
   vi.doMock("@/lib/email", () => ({ sendEmail }));
   vi.doMock("@/lib/alerts", async (orig) => ({ ...(await orig<typeof import("@/lib/alerts")>()), sendTelegramAlert }));

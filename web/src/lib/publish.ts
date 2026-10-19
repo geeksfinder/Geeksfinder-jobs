@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { getFlag } from "./admin/flags";
 import { slugify } from "./format";
 import { renderMarkdown } from "./markdown";
 import { SITE } from "./site";
@@ -45,6 +46,9 @@ export async function publishDraft(admin: SupabaseClient, d: DraftRow, reviewer:
       sources,
       reviewer_name: reviewer,
       related_skills: (facts.related_skills ?? []).slice(0, 8),
+      kind: d.kind === "guide" ? "guide" : "news",
+      // No person approved it: the byline says "GeeksFinder Desk" without a reviewer (editorial policy)
+      auto_published: reviewerId === null,
     })
     .select("id, slug")
     .single();
@@ -58,7 +62,7 @@ export async function publishDraft(admin: SupabaseClient, d: DraftRow, reviewer:
     console.warn(`[publish] site URL is ${SITE.url}; skipped the Telegram channel post and IndexNow ping`);
     return { ok: true as const, id: article.id as string, slug: article.slug as string, url };
   }
-  if (process.env.TELEGRAM_CHANNEL_ID) {
+  if (process.env.TELEGRAM_CHANNEL_ID && (await getFlag("telegram_sends", admin))) {
     const ok = await sendTelegram(process.env.TELEGRAM_CHANNEL_ID, `<b>${esc(d.title)}</b>\n\n${esc(d.summary ?? "")}`, [[{ text: "Read on GeeksFinder", url }]]);
     if (ok) await admin.from("articles").update({ telegram_posted: true }).eq("id", article.id);
   }

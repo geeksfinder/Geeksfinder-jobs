@@ -4,6 +4,7 @@
  *   npx tsx scripts/report.ts          (scheduled at 21:45 IST in .github/workflows/daily.yml)
  * Counts only — no student names, emails or resume content go into the email.
  */
+import { withCronRun } from "@/lib/admin/cron-run";
 import { sendEmail } from "@/lib/email";
 import { SITE } from "@/lib/site";
 import { adminClient } from "@/lib/supabase/admin";
@@ -42,7 +43,7 @@ async function main() {
   for (const r of srcRows ?? []) bySource.set(String(r.source).split(":")[0], (bySource.get(String(r.source).split(":")[0]) ?? 0) + 1);
 
   const { data: drafts } = await db.from("article_drafts").select("id, kind, title, status, auto_published, review, created_at").gte("created_at", since).order("created_at");
-  const { data: published } = await db.from("articles").select("title, slug, reviewer_name, draft_id").gte("published_at", since);
+  const { data: published } = await db.from("articles").select("title, slug, auto_published").gte("published_at", since);
   const { count: waitingReview } = await db.from("article_drafts").select("id", { count: "exact", head: true }).eq("status", "draft");
 
   const [{ data: lastJob }, { data: lastNews }] = await Promise.all([
@@ -55,12 +56,16 @@ async function main() {
   if (jobAge === null || jobAge > 30) health.push(`No new jobs saved for ${jobAge ?? "?"} hours — check the 06:00 run in GitHub Actions.`);
   if (newsAge === null || newsAge > 30) health.push(`No news fetched for ${newsAge ?? "?"} hours — check the blog runs in GitHub Actions.`);
   if (waitingAi > 50) health.push(`${waitingAi} jobs waiting for the AI step (Gemini quota may be used up).`);
+  const { data: runs } = await db.from("cron_runs").select("job, status, error").gte("started_at", since).in("status", ["failed", "warning"]).order("started_at");
+  for (const r of runs ?? []) health.push(`Cron "${r.job}" ${r.status === "failed" ? "failed" : "had warnings"}: ${String(r.error ?? "").split("\n")[0].slice(0, 160)}`);
+  const { data: off } = await db.from("app_flags").select("key").eq("enabled", false);
+  if (off?.length) health.push(`Switched off: ${off.map((f) => f.key).join(", ")}.`);
 
   // ---------- email ----------
   const row = (k: string, v: string | number) => `<tr><td style="padding:6px 0;color:#4A5568">${k}</td><td style="padding:6px 0;text-align:right;font-weight:600;color:#14213D">${v}</td></tr>`;
   const table = (rows: string) => `<table width="100%" cellpadding="0" cellspacing="0" style="font-size:14px;border-top:1px solid #E3E7ED">${rows}</table>`;
   const h = (t: string) => `<h2 style="font-size:16px;margin:24px 0 8px;color:#14213D">${t}</h2>`;
-  const autoPub = (published ?? []).filter((a) => /automated/i.test(a.reviewer_name ?? ""));
+  const autoPub = (published ?? []).filter((a) => a.auto_published);
   const held = (drafts ?? []).filter((d) => d.status === "draft");
 
   const blogList = [
@@ -83,14 +88,21 @@ async function main() {
   <p style="color:#7A8494;font-size:12px;margin-top:24px">Sent to GeeksFinder admins only. Counts only; no student details.</p>
 </div>`;
 
-  const { data: admins } = await db.from("users").select("email").eq("role", "admin");
+  const { data: owners } = await db.from("admin_users").select("user_id").eq("role", "owner");
+  const { data: admins } = await db.from("users").select("email").in("id", (owners ?? []).map((o) => o.user_id));
   const to = (admins ?? []).map((a) => a.email).filter(Boolean) as string[];
-  if (!to.length) return console.log("report: no admin accounts to send to");
+  if (!to.length) {
+    console.log("report: no owner accounts to send to");
+    return { sent: 0, needs_attention: health.length };
+  }
   const subject = `GeeksFinder: ${newJobs} new jobs, ${autoPub.length} posts published${health.length ? " · needs attention" : ""}`;
+  let sent = 0;
   for (const email of to) {
     const ok = await sendEmail(email, subject, html);
+    if (ok) sent++;
     console.log(`report: ${ok ? "sent" : "FAILED"} to an admin`);
   }
+  return { sent, needs_attention: health.length };
 }
 
-main().then(() => process.exit(0)).catch((e) => { console.error(e); process.exit(1); });
+withCronRun("report", main, db).then(() => process.exit(0)).catch((e) => { console.error(e); process.exit(1); });

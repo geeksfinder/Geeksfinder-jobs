@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getFlag } from "@/lib/admin/flags";
 import { adminClient } from "@/lib/supabase/admin";
 import { verifyWebhook } from "@/lib/razorpay";
 import { sendTelegram } from "@/lib/telegram";
@@ -67,8 +68,8 @@ export async function POST(request: Request) {
       await update({});
       const { data: u } = await admin.from("users").select("email, telegram_chat_id").eq("id", userId).single();
       const msg = `Your ₹${plan.price} ${plan.name} renewal didn't go through. Please keep ₹${plan.price} in your UPI-linked account — we'll retry automatically.`;
-      if (u?.telegram_chat_id) await sendTelegram(u.telegram_chat_id, msg);
-      if (u?.email) await sendEmail(u.email, `Your ${plan.name} renewal is pending`, `<p>${msg}</p>`);
+      if (u?.telegram_chat_id && (await getFlag("telegram_sends", admin))) await sendTelegram(u.telegram_chat_id, msg);
+      if (u?.email && (await getFlag("email_sends", admin))) await sendEmail(u.email, `Your ${plan.name} renewal is pending`, `<p>${msg}</p>`);
       break;
     }
 

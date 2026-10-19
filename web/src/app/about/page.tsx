@@ -3,7 +3,7 @@ import Link from "next/link";
 import { LegalPage } from "@/components/landing/LegalPage";
 import { SITE } from "@/lib/site";
 
-export const metadata: Metadata = { title: "About", description: "Why GeeksFinder exists and who runs it.", alternates: { canonical: "/about" } };
+export const metadata: Metadata = { title: "About", description: "Why GeeksFinder exists, who runs it, and what it won't do: no applying on your behalf, no LinkedIn scraping, no job promises and no selling your data.", alternates: { canonical: "/about" } };
 
 export default function About() {
   return (

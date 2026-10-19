@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FLAGS, SPEND_PROVIDERS } from "./admin/constants";
 
 /** Request body schemas. Every API route parses its body with one of these. */
 
@@ -58,6 +59,17 @@ export const PublicToolBody = z.object({
   resume: text(15000).min(200, "Paste at least a few lines of your resume."),
   job: text(8000).min(100, "Paste the full job description."),
   turnstile: z.string().max(2048).optional(),
+});
+
+// Admin (SPEC.md §5). Kill switches need the switch name typed back, so one can't be flipped by accident.
+export const FlagBody = z
+  .object({ key: z.enum(FLAGS), enabled: z.boolean(), note: text(200).optional(), confirm: z.string().max(40) })
+  .refine((b) => b.confirm === b.key, { message: "Type the switch name to confirm.", path: ["confirm"] });
+
+export const SpendCapBody = z.object({
+  provider: z.enum(SPEND_PROVIDERS),
+  monthly_cap_inr: z.number().min(0).max(1_000_000),
+  alert_pct: z.number().int().min(1).max(100).default(80),
 });
 
 /** Parse JSON safely; returns null on invalid JSON or schema mismatch. */

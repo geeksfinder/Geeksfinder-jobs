@@ -1,17 +1,24 @@
 import type { MetadataRoute } from "next";
-import { HUB_MIN_JOBS, hubCounts } from "@/lib/hubs";
+import { indexableHubs } from "@/lib/hubs";
 import { publicClient } from "@/lib/public-data";
 import { SITE } from "@/lib/site";
 
 export const dynamic = "force-dynamic"; // query at request time, not at build
 export const revalidate = 86400;
 
-const CORE = ["", "/blog", "/jobs", "/tools", "/tools/ats-resume-checker", "/tools/hr-email-generator", "/about", "/editorial-policy", "/contact", "/privacy", "/terms", "/refund-policy", "/hr-opt-out"];
+// Pages whose content changes with the daily job and article runs; the rest are policy pages
+const LIVE = ["", "/blog", "/jobs"];
+const STATIC = ["/tools", "/tools/ats-resume-checker", "/tools/hr-email-generator", "/about", "/editorial-policy", "/contact", "/privacy", "/terms", "/refund-policy", "/hr-opt-out"];
+// Date policy pages last changed; update when one is edited, so lastModified stays honest
+const STATIC_UPDATED = new Date("2026-10-19");
 
 /** Core pages, published articles, and only job hubs with ≥ 10 live jobs (thin hubs stay out). */
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
-  const core = CORE.map((p) => ({ url: `${SITE.url}${p}`, lastModified: now, changeFrequency: p === "" || p === "/blog" ? ("daily" as const) : ("monthly" as const), priority: p === "" ? 1 : 0.6 }));
+  const core: MetadataRoute.Sitemap = [
+    ...LIVE.map((p) => ({ url: `${SITE.url}${p}`, lastModified: now, changeFrequency: "daily" as const, priority: p === "" ? 1 : 0.8 })),
+    ...STATIC.map((p) => ({ url: `${SITE.url}${p}`, lastModified: STATIC_UPDATED, changeFrequency: "monthly" as const, priority: p.startsWith("/tools") ? 0.7 : 0.4 })),
+  ];
 
   const db = publicClient();
   if (!db) return core;
@@ -19,9 +26,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const { data: articles } = await db.from("articles").select("slug, published_at, updated_at").order("published_at", { ascending: false }).limit(5000);
   const blog = (articles ?? []).map((a) => ({ url: `${SITE.url}/blog/${a.slug}`, lastModified: new Date(a.updated_at ?? a.published_at), changeFrequency: "weekly" as const, priority: 0.7 }));
 
-  const counts = await hubCounts();
-  const hubs: MetadataRoute.Sitemap = [...counts.entries()]
-    .filter(([, n]) => n >= HUB_MIN_JOBS)
-    .map(([slug]) => ({ url: `${SITE.url}/jobs/${slug}`, lastModified: now, changeFrequency: "daily" as const, priority: 0.8 }));
+  const hubs = (await indexableHubs()).map(({ hub }) => ({ url: `${SITE.url}/jobs/${hub.slug}`, lastModified: now, changeFrequency: "daily" as const, priority: 0.8 }));
   return [...core, ...blog, ...hubs];
 }

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { PublicShell } from "@/components/landing/PublicShell";
 import { ToolCta } from "@/components/landing/ToolCta";
-import { JsonLd, faqSchema } from "@/lib/seo";
+import { JsonLd, faqSchema, webAppSchema } from "@/lib/seo";
 import { AtsChecker } from "./AtsChecker";
 
 export const metadata: Metadata = {
@@ -19,7 +19,7 @@ const FAQ = [
 export default function AtsPage() {
   return (
     <PublicShell>
-      <JsonLd data={faqSchema(FAQ)} />
+      <JsonLd data={[faqSchema(FAQ), webAppSchema({ name: "ATS resume checker for freshers", path: "/tools/ats-resume-checker", description: "Check a resume against a job description: matched and missing skills, and what ATS software trips on." })]} />
       <div className="wrap max-w-[56rem] pb-24 pt-10 md:pt-16">
         <h1 className="text-h1 font-bold md:text-h1-lg">ATS resume checker</h1>
         <p className="mt-2 max-w-[60ch] text-body text-ink-2">Paste your resume and the job description. We show which asked skills you have, which are missing, and what to fix. It runs in your browser — nothing is uploaded.</p>

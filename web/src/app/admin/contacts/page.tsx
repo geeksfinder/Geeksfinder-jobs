@@ -1,11 +1,12 @@
 import { Badge } from "@/components/ui/Highlighter";
-import { requireAdmin } from "@/lib/admin";
+import { requireAdmin } from "@/lib/admin/auth";
+import { AREA_ROLES } from "@/lib/admin/constants";
 import { shortDate } from "@/lib/format";
 import { ContactToggle } from "./ContactToggle";
 
 /** HR contacts found by the finder chain. Flag do-not-contact to hide an address from every student. */
 export default async function Contacts({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  const { admin } = await requireAdmin();
+  const { admin } = await requireAdmin(AREA_ROLES.contacts);
   const { q } = await searchParams;
   let query = admin.from("company_contacts").select("id, company_domain, email, name, source, verified, do_not_contact, opted_out_at").order("company_domain").limit(200);
   if (q) query = query.or(`email.ilike.%${q.replace(/[%,()]/g, "")}%,company_domain.ilike.%${q.replace(/[%,()]/g, "")}%`);

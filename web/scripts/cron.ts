@@ -5,6 +5,8 @@
  */
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { withCronRun, type CronContext } from "@/lib/admin/cron-run";
+import { getFlag } from "@/lib/admin/flags";
 import { generateJSON, untrusted } from "@/lib/ai";
 import { sendEmail } from "@/lib/email";
 import { htmlToText, minYearsAsked } from "@/lib/jobtext";
@@ -292,7 +294,7 @@ async function fetchRemotive(): Promise<RawJob[]> {
 
 // ---------- Pipeline ----------
 
-async function ingest() {
+async function ingest(ctx: CronContext) {
   const { data: profiles } = await db.from("profiles").select("preferred_roles");
   const roleCounts = new Map<string, number>();
   for (const p of profiles ?? []) for (const r of p.preferred_roles ?? []) roleCounts.set(r.toLowerCase(), (roleCounts.get(r.toLowerCase()) ?? 0) + 1);
@@ -321,15 +323,17 @@ async function ingest() {
   let inserted = 0;
   for (let i = 0; i < fresh.length; i += 100) {
     const { error } = await db.from("jobs").insert(fresh.slice(i, i + 100));
-    if (error) log("insert failed", error.message);
+    if (error) ctx.warn(`insert failed: ${error.message}`);
     else inserted += Math.min(100, fresh.length - i);
   }
   log(`inserted ${inserted} of ${fresh.length} new jobs`);
 
-  await enrich();
-  await match();
+  const { enriched } = await enrich();
+  const { matched } = await match();
   const { data: cleaned, error } = await db.rpc("cleanup_old_data");
   log("cleanup", error ? `failed: ${error.message}` : JSON.stringify(cleaned));
+  if (error) ctx.warn(`cleanup failed: ${error.message}`);
+  return { fetched: fetched.length, kept: all.length, new: fresh.length, inserted, enriched, matched };
 }
 
 /** AI once per job, batched 15 per call. */
@@ -372,6 +376,7 @@ ${untrusted("jobs", batch.map((j) => `### id=${j.id}\n${j.title} at ${j.company}
     await sleep(Number(process.env.AI_DELAY_MS ?? 4000)); // stay under free-tier RPM
   }
   log(`enriched ${(jobs ?? []).length} jobs`);
+  return { enriched: (jobs ?? []).length };
 }
 
 async function match() {
@@ -393,6 +398,7 @@ async function match() {
     }
   }
   log(`matched ${saved} user-job pairs`);
+  return { matched: saved };
 }
 
 /** Hourly run at :30 IST. Due when it's the user's alert hour and the frequency matches. */
@@ -417,7 +423,12 @@ function inQuietHours(range: string | null) {
 
 type MatchRow = AlertMatch & { job_id: string };
 
-async function notify() {
+async function notify(ctx: CronContext) {
+  // Kill switches, read once per run (SPEC.md §5). A paused channel leaves matches un-notified for the next run.
+  const telegramOn = await getFlag("telegram_sends", db);
+  const emailOn = await getFlag("email_sends", db);
+  if (!telegramOn) ctx.warn("telegram_sends is off: no Telegram alerts this run");
+  if (!emailOn) ctx.warn("email_sends is off: no email alerts this run");
   const { data: settings } = await db.from("alert_settings").select("user_id, frequency, channels, alert_hour, quiet_hours, last_sent_at, users(email, telegram_chat_id, plan, name)");
   let sent = 0;
   for (const s of settings ?? []) {
@@ -430,10 +441,10 @@ async function notify() {
     if (!matches.length) continue;
 
     let delivered = false;
-    if (s.channels.includes("telegram") && u.telegram_chat_id) {
+    if (telegramOn && s.channels.includes("telegram") && u.telegram_chat_id) {
       delivered = await sendTelegramAlert(u.telegram_chat_id, { name: u.name, plan: u.plan, matches, app: APP });
     }
-    if (s.channels.includes("email") && u.email) {
+    if (emailOn && s.channels.includes("email") && u.email) {
       const unsub = unsubscribeUrl(APP, s.user_id);
       const html = alertEmailHtml(matches, { plan: u.plan, unsubscribeUrl: unsub, app: APP });
       delivered = (await sendEmail(u.email, alertEmailSubject(matches.length), html, { unsubscribeUrl: unsub })) || delivered;
@@ -445,21 +456,25 @@ async function notify() {
     }
   }
   log(`sent digests to ${sent} users`);
-  await followUps();
+  const reminded = telegramOn ? await followUps() : 0;
   await downgradeExpired();
+  return { digests: sent, follow_ups: reminded };
 }
 
 async function followUps() {
+  let reminded = 0;
   const { data } = await db.from("outreach").select("id, user_id, contact_email, jobs(id, title, company), users(telegram_chat_id)").eq("status", "sent").lte("follow_up_at", new Date().toISOString());
   for (const o of data ?? []) {
     const job = o.jobs as unknown as { id: string; title: string; company: string };
     const chat = (o.users as unknown as { telegram_chat_id: number | null })?.telegram_chat_id;
     const { data: app } = await db.from("applications").select("stage").eq("user_id", o.user_id).eq("job_id", job.id).maybeSingle();
     if (chat && app?.stage === "applied") {
+      reminded++;
       await sendTelegram(chat, `It's been 5 days since you emailed ${esc(o.contact_email ?? "HR")} about <b>${esc(job.title)}</b> at ${esc(job.company)}. A short, polite follow-up often gets a reply.`, [[{ text: "Open job", url: `${APP}/apply/${job.id}?tab=email` }]]);
     }
     await db.from("outreach").update({ status: "followup_reminded" }).eq("id", o.id);
   }
+  return reminded;
 }
 
 async function downgradeExpired() {
@@ -502,12 +517,15 @@ async function prune() {
   const remove = reject.filter((id) => !used.has(id));
   for (let i = 0; i < remove.length; i += 200) await db.from("jobs").delete().in("id", remove.slice(i, i + 200));
   log(`pruned ${remove.length} senior jobs (kept ${used.size} that students already used)`);
+  return { pruned: remove.length, kept_in_use: used.size };
 }
 
+const COMMANDS: Record<string, (ctx: CronContext) => Promise<Record<string, number> | void>> = { ingest, notify, enrich, match, backfill, prune };
 const cmd = process.argv[2];
-const run = { ingest, notify, enrich, match, backfill, prune }[cmd as "ingest"];
+const run = COMMANDS[cmd];
 if (!run) {
   console.error("usage: npx tsx scripts/cron.ts ingest|notify|enrich|match|backfill|prune");
   process.exit(1);
 }
-run().then(() => process.exit(0)).catch((e) => { console.error(e); process.exit(1); });
+// Every run is logged in cron_runs; a failure alerts the owner on Telegram
+withCronRun(cmd, run, db).then(() => process.exit(0)).catch((e) => { console.error(e); process.exit(1); });

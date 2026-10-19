@@ -3,6 +3,9 @@ import { Wordmark } from "@/components/ui/Wordmark";
 import { SITE } from "@/lib/site";
 
 const LINKS = [
+  { href: "/jobs", label: "Fresher jobs" },
+  { href: "/jobs/internship-fresher-jobs", label: "Internships" },
+  { href: "/tools", label: "Free tools" },
   { href: "/privacy", label: "Privacy" },
   { href: "/terms", label: "Terms" },
   { href: "/refund-policy", label: "Refund policy" },

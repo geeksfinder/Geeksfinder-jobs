@@ -1,10 +1,11 @@
 import { notFound } from "next/navigation";
-import { requireAdmin } from "@/lib/admin";
+import { requireAdmin } from "@/lib/admin/auth";
+import { AREA_ROLES } from "@/lib/admin/constants";
 import { uuid } from "@/lib/validate";
 import { DraftEditor } from "./DraftEditor";
 
 export default async function DraftPage({ params }: { params: Promise<{ id: string }> }) {
-  const { admin } = await requireAdmin();
+  const { admin } = await requireAdmin(AREA_ROLES.drafts);
   const { id } = await params;
   if (!uuid.safeParse(id).success) notFound();
   const { data: d } = await admin.from("article_drafts").select("*").eq("id", id).maybeSingle();

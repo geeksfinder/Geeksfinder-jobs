@@ -5,8 +5,8 @@ import { cache } from "react";
 import { PublicShell } from "@/components/landing/PublicShell";
 import { ButtonLink } from "@/components/ui/Button";
 import { JobCard } from "@/components/ui/JobCard";
-import { CITIES, HUB_MIN_JOBS, ROLES, hubJobs, hubStats, parseHub } from "@/lib/hubs";
-import { JsonLd, breadcrumbSchema } from "@/lib/seo";
+import { CITIES, HUB_MIN_JOBS, ROLES, hubCounts, hubJobs, hubName, hubSlug, hubStats, parseHub } from "@/lib/hubs";
+import { JsonLd, breadcrumbSchema, fitTitle } from "@/lib/seo";
 
 export const revalidate = 3600;
 
@@ -14,38 +14,57 @@ const load = cache(async (slug: string) => {
   const hub = parseHub(slug);
   if (!hub) return null;
   const jobs = await hubJobs(hub);
-  return { hub, jobs, stats: hubStats(jobs) };
+  return { hub, jobs, stats: hubStats(jobs), name: hubName(hub) };
 });
 
 export async function generateMetadata({ params }: { params: Promise<{ hub: string }> }): Promise<Metadata> {
   const d = await load((await params).hub);
   if (!d) return { title: "Not found", robots: { index: false } };
-  const where = d.hub.city.slug === "remote" ? "Remote" : `in ${d.hub.city.name}`;
+  const n = d.stats.total;
   return {
-    title: `${d.hub.role.name} Fresher Jobs ${where} (Updated Daily)`,
-    description: `${d.stats.total} fresher ${d.hub.role.name} jobs ${where}. Skills companies ask for, who's hiring this week, and matched alerts on Telegram.`,
+    title: fitTitle(`${d.name} (Updated Daily)`, d.name),
+    description: `${n >= 60 ? "60+" : n} live ${d.name.charAt(0).toLowerCase()}${d.name.slice(1)}. See the skills companies ask for, who is hiring this week, and get matches on Telegram every morning.`,
     alternates: { canonical: `/jobs/${d.hub.slug}` },
     // Thin hubs stay out of the index (plan §8)
-    robots: d.stats.total >= HUB_MIN_JOBS ? { index: true, follow: true } : { index: false, follow: true },
+    robots: n >= HUB_MIN_JOBS ? { index: true, follow: true } : { index: false, follow: true },
   };
 }
+
+type LinkItem = { href: string; label: string; count: number };
 
 export default async function HubPage({ params }: { params: Promise<{ hub: string }> }) {
   const d = await load((await params).hub);
   if (!d) notFound();
-  const { hub, jobs, stats } = d;
-  const where = hub.city.slug === "remote" ? "remote" : `in ${hub.city.name}`;
-  const relatedCities = CITIES.filter((c) => c.slug !== hub.city.slug).slice(0, 5);
-  const relatedRoles = ROLES.filter((r) => r.slug !== hub.role.slug).slice(0, 5);
+  const { hub, jobs, stats, name } = d;
+  const counts = new Map(await hubCounts());
+  const item = (role: (typeof ROLES)[number] | null, city: (typeof CITIES)[number] | null): LinkItem => {
+    const slug = hubSlug(role, city);
+    return { href: `/jobs/${slug}`, label: hubName({ role, city }), count: counts.get(slug) ?? 0 };
+  };
+  // Related hubs that have live jobs, biggest first; links to empty pages help nobody
+  const live = (xs: LinkItem[]) => xs.filter((x) => x.count > 0).sort((a, b) => b.count - a.count).slice(0, 6);
+  const groups: { title: string; links: LinkItem[] }[] = [];
+  if (hub.role && hub.city) {
+    groups.push({ title: "Wider searches", links: [item(hub.role, null), item(null, hub.city)].filter((x) => x.count > 0) });
+    groups.push({ title: `${hub.role.name} jobs in other cities`, links: live(CITIES.filter((c) => c.slug !== hub.city!.slug).map((c) => item(hub.role, c))) });
+    groups.push({ title: `Other roles ${hub.city.slug === "remote" ? "(remote)" : `in ${hub.city.name}`}`, links: live(ROLES.filter((r) => r.slug !== hub.role!.slug).map((r) => item(r, hub.city))) });
+  } else if (hub.role) {
+    groups.push({ title: `${hub.role.name} jobs by city`, links: live(CITIES.map((c) => item(hub.role, c))) });
+    groups.push({ title: "Other roles", links: live(ROLES.filter((r) => r.slug !== hub.role!.slug).map((r) => item(r, null))) });
+  } else if (hub.city) {
+    groups.push({ title: `Roles ${hub.city.slug === "remote" ? "(remote)" : `in ${hub.city.name}`}`, links: live(ROLES.map((r) => item(r, hub.city))) });
+    groups.push({ title: "Other cities", links: live(CITIES.filter((c) => c.slug !== hub.city!.slug).map((c) => item(null, c))) });
+  }
+  const shown = groups.filter((g) => g.links.length);
 
   return (
     <PublicShell>
-      <JsonLd data={breadcrumbSchema([{ name: "Jobs", path: "/jobs" }, { name: `${hub.role.name} fresher jobs ${where}`, path: `/jobs/${hub.slug}` }])} />
+      <JsonLd data={breadcrumbSchema([{ name: "Jobs", path: "/jobs" }, { name, path: `/jobs/${hub.slug}` }])} />
       <div className="wrap pb-24 pt-8 md:pt-12">
         <nav aria-label="Breadcrumb" className="text-small text-ink-2">
-          <Link href="/jobs" className="underline-offset-4 hover:underline">Jobs</Link> <span aria-hidden>/</span> {hub.role.name}
+          <Link href="/jobs" className="underline-offset-4 hover:underline">Jobs</Link> <span aria-hidden>/</span> {hub.role?.name ?? hub.city?.name}
         </nav>
-        <h1 className="mt-3 max-w-[30ch] text-h1 font-bold md:text-h1-lg">{hub.role.name} fresher jobs {where}</h1>
+        <h1 className="mt-3 max-w-[30ch] text-h1 font-bold md:text-h1-lg">{name}</h1>
 
         <dl className="mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-panel border border-line bg-line sm:grid-cols-3">
           <div className="bg-paper p-4"><dt className="text-small text-ink-2">Live openings</dt><dd className="tabular text-h2 font-semibold">{stats.total}</dd></div>
@@ -81,24 +100,22 @@ export default async function HubPage({ params }: { params: Promise<{ hub: strin
           )}
         </section>
 
-        <section className="mt-12 grid gap-8 border-t border-line pt-8 md:grid-cols-2">
-          <div>
-            <h2 className="text-small font-semibold text-ink-2">{hub.role.name} jobs in other cities</h2>
-            <ul className="mt-2 space-y-1">
-              {relatedCities.map((c) => (
-                <li key={c.slug}><Link href={`/jobs/${hub.role.slug}-fresher-${c.slug}`} className="text-body text-action underline-offset-4 hover:underline">{hub.role.name} fresher jobs {c.slug === "remote" ? "remote" : `in ${c.name}`}</Link></li>
-              ))}
-            </ul>
-          </div>
-          <div>
-            <h2 className="text-small font-semibold text-ink-2">Other roles {where}</h2>
-            <ul className="mt-2 space-y-1">
-              {relatedRoles.map((r) => (
-                <li key={r.slug}><Link href={`/jobs/${r.slug}-fresher-${hub.city.slug}`} className="text-body text-action underline-offset-4 hover:underline">{r.name} fresher jobs {where}</Link></li>
-              ))}
-            </ul>
-          </div>
-        </section>
+        {shown.length > 0 && (
+          <section className="mt-12 grid gap-8 border-t border-line pt-8 md:grid-cols-3">
+            {shown.map((g) => (
+              <div key={g.title}>
+                <h2 className="text-small font-semibold text-ink-2">{g.title}</h2>
+                <ul className="mt-2 space-y-1">
+                  {g.links.map((l) => (
+                    <li key={l.href}>
+                      <Link href={l.href} className="text-body text-action underline-offset-4 hover:underline">{l.label}</Link> <span className="tabular text-small text-ink-3">{l.count}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </section>
+        )}
       </div>
     </PublicShell>
   );

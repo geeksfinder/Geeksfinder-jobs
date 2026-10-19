@@ -5,6 +5,8 @@
  * (editing clears the review). Unchanged drafts keep their stored scores, so a weak draft can't pass on a lucky
  * second roll. Drafts that fail — including ones that read as machine-written — stay in the queue with the reasons.
  */
+import { withCronRun, type CronContext } from "@/lib/admin/cron-run";
+import { getFlag } from "@/lib/admin/flags";
 import { runChecks } from "@/lib/article-checks";
 import { aiReview, canAutoPublish, seoReview, type AiReview, type SeoResult } from "@/lib/article-review";
 import type { ArticleDraft } from "@/lib/articles";
@@ -18,14 +20,18 @@ const MAX = Number(process.env.REVIEW_MAX ?? 15);
 type Stored = { seo_score?: number; seo_notes?: string[]; ai?: AiReview | null; held_because?: string[] };
 type Facts = { facts: { fact: string; source_url: string }[]; related_skills?: string[]; freshers_note?: string; used_source_urls?: string[] };
 
-async function main() {
+async function main(ctx: CronContext) {
+  if (!(await getFlag("article_pipeline", db))) return ctx.warn("article_pipeline is off: nothing reviewed or published");
   const { data: drafts } = await db
     .from("article_drafts")
     .select("id, kind, cluster_id, title, summary, topic, body_md, facts, review, created_at")
     .eq("status", "draft")
     .order("created_at")
     .limit(MAX);
-  if (!drafts?.length) return log("review: no drafts waiting");
+  if (!drafts?.length) {
+    log("review: no drafts waiting");
+    return { published: 0, held: 0 };
+  }
 
   const since = new Date(Date.now() - 90 * 86_400_000).toISOString();
   const { data: pub } = await db.from("articles").select("title").gte("published_at", since);
@@ -77,6 +83,7 @@ async function main() {
     log(`review: published "${d.title}" → ${res.url}`);
   }
   log(`review: ${posted} published, ${held} kept in drafts`);
+  return { published: posted, held };
 }
 
-main().then(() => process.exit(0)).catch((e) => { console.error(e); process.exit(1); });
+withCronRun("review-drafts", main, db).then(() => process.exit(0)).catch((e) => { console.error(e); process.exit(1); });

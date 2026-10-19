@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { PublicShell } from "@/components/landing/PublicShell";
+import { JsonLd, webAppSchema } from "@/lib/seo";
 import { ToolCta } from "@/components/landing/ToolCta";
 import { HrEmailTool } from "./HrEmailTool";
 
@@ -12,6 +13,7 @@ export const metadata: Metadata = {
 export default function HrEmailPage() {
   return (
     <PublicShell>
+      <JsonLd data={webAppSchema({ name: "HR email generator for freshers", path: "/tools/hr-email-generator", description: "Write a short, personal email to HR for a fresher job, plus a 300-character LinkedIn note." })} />
       <div className="wrap max-w-[56rem] pb-24 pt-10 md:pt-16">
         <h1 className="text-h1 font-bold md:text-h1-lg">HR email generator</h1>
         <p className="mt-2 max-w-[60ch] text-body text-ink-2">Paste your resume and the job. We write a short email to HR that mentions two things you&apos;ve actually done, plus a LinkedIn connection note.</p>

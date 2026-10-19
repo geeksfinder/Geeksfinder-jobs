@@ -24,6 +24,9 @@ export type Article = {
   freshers_note: string | null;
   sources: { url: string; title: string }[];
   reviewer_name: string;
+  // true = published by the automated checks with no person approving it; the byline then names no reviewer
+  auto_published?: boolean;
+  kind?: "news" | "guide";
   related_skills: string[];
   published_at: string;
   updated_at: string | null;

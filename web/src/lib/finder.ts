@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { getFlag } from "./admin/flags";
 import { safeFetch } from "./safe-fetch";
 
 export type Contact = { email: string; name?: string; source: string };
@@ -42,7 +43,8 @@ export async function findContact(
     if (!(await blocked(fromSite))) return { email: fromSite, source: "company website" };
   }
 
-  if (process.env.HUNTER_API_KEY) {
+  // Hunter is a paid lookup: the paid_contact_lookups switch stops it (spend is ₹0 on the free plan, so no cap check yet)
+  if (process.env.HUNTER_API_KEY && (await getFlag("paid_contact_lookups"))) {
     try {
       const res = await fetch(`https://api.hunter.io/v2/domain-search?domain=${encodeURIComponent(domain)}&department=hr&limit=3&api_key=${process.env.HUNTER_API_KEY}`, { signal: AbortSignal.timeout(6000) });
       const data = await res.json();

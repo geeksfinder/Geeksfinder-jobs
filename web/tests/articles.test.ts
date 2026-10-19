@@ -1,6 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/supabase/admin", () => ({ adminClient: () => ({ rpc: async () => ({ data: [{ calls: 1 }], error: null }) }) }));
+// Kill switches and spend caps have their own tests (admin.test.ts); here they are on and under cap
+vi.mock("@/lib/admin/flags", () => ({ getFlag: async () => true }));
+vi.mock("@/lib/admin/spend", () => ({ canSpend: async () => ({ ok: true, spent: 0, cap: null }) }));
 
 const good = {
   title: "TCS opens off-campus drive for 2026 graduates",

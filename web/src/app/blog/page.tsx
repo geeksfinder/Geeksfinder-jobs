@@ -9,7 +9,7 @@ export const revalidate = 600;
 
 export const metadata: Metadata = {
   title: "Fresher hiring news and career guides",
-  description: "Hiring drives, off-campus openings, fresher salaries and in-demand skills — reviewed news for final-year students in India.",
+  description: "Hiring drives, off-campus openings, resume and interview guides, and the skills companies ask for — fact-checked for final-year students in India.",
   alternates: { canonical: "/blog" },
 };
 
@@ -24,7 +24,7 @@ export default async function BlogIndex() {
     <PublicShell>
       <div className="wrap max-w-[50rem] pb-24 pt-10 md:pt-16">
         <h1 className="text-h1 font-bold md:text-h1-lg">GeeksFinder Blog</h1>
-        <p className="mt-2 max-w-[60ch] text-body text-ink-2">Hiring news for final-year students and freshers, written from several sources and reviewed by a person before it goes live.</p>
+        <p className="mt-2 max-w-[60ch] text-body text-ink-2">Hiring news and career guides for final-year students and freshers. Every article is checked for copying and for facts its sources don&apos;t support before it goes live.</p>
 
         {!featured ? (
           <div className="mt-10 rounded-panel bg-paper-2 p-6">

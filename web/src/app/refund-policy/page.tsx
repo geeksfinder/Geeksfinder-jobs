@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { LegalPage } from "@/components/landing/LegalPage";
 import { SITE } from "@/lib/site";
 
-export const metadata: Metadata = { title: "Refund policy", description: "How GeeksFinder paid plans, cancellation and refunds work.", alternates: { canonical: "/refund-policy" } };
+export const metadata: Metadata = { title: "Refund policy", description: "How the GeeksFinder free trial, UPI Autopay billing, cancelling a plan and refunds work, in plain words.", alternates: { canonical: "/refund-policy" } };
 
 export default function RefundPolicy() {
   return (

@@ -6,6 +6,8 @@
  *   2 Hunter.io HR search for companies still missing — keeps HUNTER_RESERVE searches for students' live lookups
  * Never touches an address marked do-not-contact; every row records its source. Safe to re-run.
  */
+import { withCronRun } from "@/lib/admin/cron-run";
+import { getFlag } from "@/lib/admin/flags";
 import { logoDomain } from "@/lib/company";
 import { scrapeSite } from "@/lib/finder";
 import { adminClient } from "@/lib/supabase/admin";
@@ -62,7 +64,10 @@ async function main() {
   log(`company websites: ${fromSites} role inboxes found; ${stillMissing.length} companies still missing`);
 
   // 2. Hunter, within budget, highest-confidence HR people only
-  let budget = await hunterLeft();
+  // The paid_contact_lookups switch stops Hunter; the free company-website step above still runs
+  const paidOn = await getFlag("paid_contact_lookups", db);
+  if (!paidOn) log("hunter: skipped, paid_contact_lookups is off");
+  let budget = paidOn ? await hunterLeft() : 0;
   log(`hunter: ${budget} searches to use now (keeping ${RESERVE} for students this month)`);
   let fromHunter = 0;
   const unresolved: string[] = [];
@@ -88,6 +93,7 @@ async function main() {
   }
   log(`hunter: ${fromHunter} HR contacts saved`);
   log(`done. companies with no contact found: ${unresolved.length}${unresolved.length ? ` (${unresolved.join(", ")}) — students get the LinkedIn note for these` : ""}`);
+  return { checked: todo.length, from_sites: fromSites, from_hunter: fromHunter, unresolved: unresolved.length };
 }
 
-main().then(() => process.exit(0)).catch((e) => { console.error(e); process.exit(1); });
+withCronRun("seed-contacts", main, db).then(() => process.exit(0)).catch((e) => { console.error(e); process.exit(1); });

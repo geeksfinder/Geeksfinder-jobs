@@ -1,21 +1,28 @@
 import Link from "next/link";
 import { Wordmark } from "@/components/ui/Wordmark";
-import { requireAdmin } from "@/lib/admin";
+import { requireAdmin } from "@/lib/admin/auth";
+import { AREA_ROLES } from "@/lib/admin/constants";
 
 export const metadata = { title: "Admin", robots: { index: false, follow: false } };
 
-/** Server-side role check on every admin request; non-admins get a 404. */
+const LINKS = [
+  { href: "/admin", label: "Overview", roles: AREA_ROLES.overview },
+  { href: "/admin/drafts", label: "Review queue", roles: AREA_ROLES.drafts },
+  { href: "/admin/contacts", label: "HR contacts", roles: AREA_ROLES.contacts },
+] as const;
+
+/** Server-side role check on every admin request; non-admins get a 404. Each page checks its own roles again. */
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  await requireAdmin();
+  const { role } = await requireAdmin();
   return (
     <div>
       <header className="border-b border-line">
         <div className="wrap flex h-16 items-center gap-6">
           <Wordmark href="/dashboard" />
           <nav className="flex gap-4 text-small">
-            <Link href="/admin" className="text-ink-2 hover:text-ink">Overview</Link>
-            <Link href="/admin/drafts" className="text-ink-2 hover:text-ink">Review queue</Link>
-            <Link href="/admin/contacts" className="text-ink-2 hover:text-ink">HR contacts</Link>
+            {LINKS.filter((l) => (l.roles as readonly string[]).includes(role)).map((l) => (
+              <Link key={l.href} href={l.href} className="text-ink-2 hover:text-ink">{l.label}</Link>
+            ))}
           </nav>
         </div>
       </header>

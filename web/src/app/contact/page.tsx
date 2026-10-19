@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { LegalPage } from "@/components/landing/LegalPage";
 import { SITE } from "@/lib/site";
 
-export const metadata: Metadata = { title: "Contact", description: "Reach the GeeksFinder team.", alternates: { canonical: "/contact" } };
+export const metadata: Metadata = { title: "Contact", description: "Email or message the GeeksFinder team on Telegram, report a wrong job listing or article, or reach our grievance officer under the DPDP Act 2023.", alternates: { canonical: "/contact" } };
 
 export default function Contact() {
   return (

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { LegalPage } from "@/components/landing/LegalPage";
 import { SITE } from "@/lib/site";
 
-export const metadata: Metadata = { title: "Privacy policy", description: "What GeeksFinder collects, why, and how to delete it.", alternates: { canonical: "/privacy" } };
+export const metadata: Metadata = { title: "Privacy policy", description: "What GeeksFinder collects, why we need it, how it is stored and who it is shared with, and how to edit your profile or delete your account and data.", alternates: { canonical: "/privacy" } };
 
 export default function Privacy() {
   return (

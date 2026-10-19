@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { getFlag } from "./admin/flags";
 import { AiBudgetError } from "./ai";
 import { adminClient } from "./supabase/admin";
 
@@ -81,6 +82,7 @@ export function articleProvider(): Provider | null {
 
 /** Same cap whichever provider writes (paid per token, or free-tier quota shared with the job pipeline). */
 async function articleBudget() {
+  if (!(await getFlag("ai_generation"))) throw new AiBudgetError("AI generation is paused (ai_generation switch)");
   const { data, error } = await adminClient().rpc("bump_ai_usage", { p_provider: "claude-articles", p_cost: 0 });
   if (error) return;
   const calls = (data as { calls: number }[] | null)?.[0]?.calls ?? 0;

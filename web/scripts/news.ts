@@ -7,6 +7,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { AiBudgetError, generateJSON, untrusted } from "@/lib/ai";
+import { withCronRun, type CronContext } from "@/lib/admin/cron-run";
+import { getFlag } from "@/lib/admin/flags";
 import { runChecks } from "@/lib/article-checks";
 import { aiReview, canAutoPublish, seoReview, type AiReview, type SeoResult } from "@/lib/article-review";
 import { GUIDES_PER_DAY, NEWS_PER_DAY, writeArticle, type ArticleDraft, type ArticleKind, type Fact } from "@/lib/articles";
@@ -195,7 +197,8 @@ async function geminiKeyWorks(key: string) {
   return false;
 }
 
-async function main() {
+async function main(ctx: CronContext) {
+  if (!(await getFlag("article_pipeline", db))) return ctx.warn("article_pipeline is off: no news fetched or drafted");
   // Optional separate Gemini key just for the blog, so its free quota doesn't compete with job enrichment and
   // resume tailoring. This script runs in its own process, so swapping the variable here affects only the blog.
   // A blocked or mistyped blog key must not stop the blog, so it is tested first and the main key is kept if it fails.
@@ -356,4 +359,4 @@ async function siteFacts(skills: string[]): Promise<Fact[]> {
   return facts.map((fact) => ({ fact, source_url: url }));
 }
 
-main().then(() => process.exit(0)).catch((e) => { console.error(e); process.exit(1); });
+withCronRun("news", main, db).then(() => process.exit(0)).catch((e) => { console.error(e); process.exit(1); });

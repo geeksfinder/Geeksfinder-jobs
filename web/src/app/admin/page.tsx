@@ -1,7 +1,8 @@
-import { requireAdmin } from "@/lib/admin";
+import { requireAdmin } from "@/lib/admin/auth";
+import { AREA_ROLES } from "@/lib/admin/constants";
 
 export default async function AdminOverview() {
-  const { admin } = await requireAdmin();
+  const { admin } = await requireAdmin(AREA_ROLES.overview);
   const today = new Date(Date.now() + 5.5 * 3_600_000).toISOString().slice(0, 10);
   const dayStart = `${today}T00:00:00+05:30`;
   const count = (q: PromiseLike<{ count: number | null }>) => q.then((r) => r.count ?? 0);

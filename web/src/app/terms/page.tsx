@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { LegalPage } from "@/components/landing/LegalPage";
 
-export const metadata: Metadata = { title: "Terms of service", description: "The rules for using GeeksFinder.", alternates: { canonical: "/terms" } };
+export const metadata: Metadata = { title: "Terms of service", description: "The rules for using GeeksFinder: third-party job listings, tailored resumes, sending HR emails yourself, paid plans on UPI Autopay, and fair use.", alternates: { canonical: "/terms" } };
 
 export default function Terms() {
   return (

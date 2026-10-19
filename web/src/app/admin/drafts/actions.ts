@@ -2,7 +2,9 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { audit, requireAdmin } from "@/lib/admin";
+import { audit } from "@/lib/admin/audit";
+import { requireAdmin } from "@/lib/admin/auth";
+import { AREA_ROLES } from "@/lib/admin/constants";
 import { runChecks } from "@/lib/article-checks";
 import { publishDraft } from "@/lib/publish";
 import { DraftEditBody, ReviewBody } from "@/lib/validate";
@@ -10,7 +12,7 @@ import { DraftEditBody, ReviewBody } from "@/lib/validate";
 type DraftFacts = { facts: { fact: string; source_url: string }[]; related_skills?: string[]; freshers_note?: string; used_source_urls?: string[] };
 
 export async function saveDraft(input: { id: string; title: string; summary: string; body_md: string; freshers_note: string }) {
-  const { user, admin } = await requireAdmin();
+  const { user, admin } = await requireAdmin(AREA_ROLES.drafts);
   const parsed = DraftEditBody.safeParse(input);
   if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0].message };
   const { data: before } = await admin.from("article_drafts").select("title, summary, body_md, facts, cluster_id").eq("id", parsed.data.id).single();
@@ -33,7 +35,7 @@ export async function saveDraft(input: { id: string; title: string; summary: str
 }
 
 export async function reviewDraft(input: { id: string; action: "approve" | "reject" }) {
-  const { user, admin, profile } = await requireAdmin();
+  const { user, admin, profile } = await requireAdmin(AREA_ROLES.drafts);
   const parsed = ReviewBody.safeParse(input);
   if (!parsed.success) return { ok: false as const, error: "Bad request" };
   const { data: d } = await admin.from("article_drafts").select("*").eq("id", parsed.data.id).single();

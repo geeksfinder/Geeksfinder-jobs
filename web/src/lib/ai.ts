@@ -5,6 +5,7 @@
  * - Untrusted text (resumes, job descriptions, web pages) is passed inside delimited
  *   blocks and the model is told to treat it as data. AI output never triggers actions by itself.
  */
+import { getFlag } from "./admin/flags";
 import { adminClient } from "./supabase/admin";
 
 // Tried in order; on overload/rate limit/timeout we move to the next (free tier often returns 503 on the newest model)
@@ -29,6 +30,7 @@ export function untrusted(label: string, text: string, max = 15000) {
 
 async function budget(provider: string) {
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return;
+  if (!(await getFlag("ai_generation"))) throw new AiBudgetError("AI is paused by an admin. Try again later.");
   const { data, error } = await adminClient().rpc("bump_ai_usage", { p_provider: provider, p_cost: 0 });
   if (error) return; // don't block on metering errors
   const calls = (data as { calls: number }[] | null)?.[0]?.calls ?? 0;

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getFlag } from "@/lib/admin/flags";
 import { alertEmailHtml, alertEmailSubject, canSendTestAlert, sendTelegramAlert, type AlertMatch } from "@/lib/alerts";
 import { sendEmail } from "@/lib/email";
 import { rateLimit } from "@/lib/ratelimit";
@@ -16,6 +17,8 @@ export async function POST(request: Request) {
   if (!body) return badRequest();
   // Account age comes from Supabase Auth, which the user can't edit
   if (!canSendTestAlert(user.created_at)) return NextResponse.json({ error: "Test alerts are available on your first day only." }, { status: 403 });
+  if (!(await getFlag(body.channel === "telegram" ? "telegram_sends" : "email_sends")))
+    return NextResponse.json({ error: "Alerts on this channel are paused for a short while. Try again later." }, { status: 503 });
   const rl = await rateLimit("testAlert", user.id);
   if (!rl.ok) return tooMany(rl.retryAfter);
 

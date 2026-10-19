@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/Highlighter";
-import { requireAdmin } from "@/lib/admin";
+import { requireAdmin } from "@/lib/admin/auth";
+import { AREA_ROLES } from "@/lib/admin/constants";
 import { shortDate } from "@/lib/format";
 
 export default async function Drafts() {
-  const { admin } = await requireAdmin();
+  const { admin } = await requireAdmin(AREA_ROLES.drafts);
   const { data } = await admin
     .from("article_drafts")
     .select("id, title, topic, kind, overlap_score, factcheck_passed, check_notes, status, created_at")
@@ -14,7 +15,7 @@ export default async function Drafts() {
   return (
     <>
       <h1 className="text-h1 font-bold">Review queue</h1>
-      <p className="mb-6 mt-1 text-body text-ink-2">Nothing publishes without your approval. Fix every flagged issue before approving.</p>
+      <p className="mb-6 mt-1 text-body text-ink-2">Drafts that pass every automatic check publish on their own; these are the ones that didn&apos;t. Fix every flagged issue before approving.</p>
       <div className="panel overflow-x-auto">
         <table className="w-full text-left text-small">
           <thead className="border-b border-line text-ink-2">
