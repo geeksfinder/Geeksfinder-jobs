@@ -4,7 +4,8 @@ import { SITE } from "@/lib/site";
 import "./globals.css";
 
 const sans = Schibsted_Grotesk({ variable: "--font-schibsted", subsets: ["latin"], display: "swap" });
-const serif = Source_Serif_4({ variable: "--font-source-serif", subsets: ["latin"], display: "swap" });
+// Italic for the landing story's times (DESIGN.md Landing); resumes and articles use the upright style
+const serif = Source_Serif_4({ variable: "--font-source-serif", subsets: ["latin"], style: ["normal", "italic"], display: "swap" });
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE.url),
