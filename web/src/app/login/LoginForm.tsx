@@ -13,6 +13,8 @@ export function LoginForm() {
   const next = safeNext(params.get("next"), "/onboarding");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
+  // Code length comes from Supabase's OTP setting (6 to 10 digits); the send route reports it
+  const [digits, setDigits] = useState<number | null>(null);
   const [sent, setSent] = useState(false);
   const [consent, setConsent] = useState(false);
   const [token, setToken] = useState("");
@@ -44,6 +46,7 @@ export function LoginForm() {
     const data = await res.json().catch(() => ({}));
     setBusy(null);
     if (!res.ok) return setErr(data.error ?? "Couldn't send the code. Try again.");
+    setDigits(typeof data.digits === "number" ? data.digits : null);
     setSent(true);
   }
 
@@ -100,7 +103,7 @@ export function LoginForm() {
         </form>
       ) : (
         <form onSubmit={verify} className="space-y-4">
-          <p className="text-body text-ink-2">We sent a 6-digit code to <span className="font-semibold text-ink">{email}</span>.</p>
+          <p className="text-body text-ink-2">We sent a {digits ? `${digits}-digit ` : ""}code from GeeksFinder to <span className="font-semibold text-ink">{email}</span>.</p>
           <div className={shake ? "shake" : ""}>
             <label htmlFor="code" className="label">Code</label>
             <input
@@ -108,7 +111,7 @@ export function LoginForm() {
               inputMode="numeric"
               autoComplete="one-time-code"
               pattern="[0-9]*"
-              maxLength={8}
+              maxLength={10}
               required
               className="input tabular tracking-[0.3em]"
               value={code}
@@ -117,7 +120,7 @@ export function LoginForm() {
               aria-describedby={err ? "login-err" : undefined}
             />
           </div>
-          <Button type="submit" className="w-full" loading={busy === "verify"} disabled={code.length < 6}>Log in</Button>
+          <Button type="submit" className="w-full" loading={busy === "verify"} disabled={code.length < (digits ?? 6)}>Log in</Button>
           <button type="button" onClick={() => { setSent(false); setCode(""); }} className="min-h-11 text-small text-action underline-offset-4 hover:underline">Use a different email</button>
         </form>
       )}
