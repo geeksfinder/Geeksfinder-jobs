@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { SITE } from "./site";
 
 export const OG_SIZE = { width: 1200, height: 630 };
 
@@ -18,7 +19,7 @@ export function ogCard({ eyebrow, title, footer }: { eyebrow: string; title: str
           <div style={{ fontSize: 28, color: "#4A5568", marginBottom: 16 }}>{eyebrow}</div>
           <div style={{ fontSize: title.length > 70 ? 54 : 64, lineHeight: 1.1, fontWeight: 700, color: "#14213D", letterSpacing: -1.5 }}>{title}</div>
         </div>
-        <div style={{ fontSize: 26, color: "#4A5568", borderTop: "2px solid #E3E7ED", paddingTop: 24 }}>{footer ?? "Fresher jobs matched to your resume · geeksfinder.in"}</div>
+        <div style={{ fontSize: 26, color: "#4A5568", borderTop: "2px solid #E3E7ED", paddingTop: 24 }}>{footer ?? `Fresher jobs matched to your resume · ${new URL(SITE.url).host}`}</div>
       </div>
     ),
     OG_SIZE,

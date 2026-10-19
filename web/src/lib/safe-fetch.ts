@@ -1,5 +1,6 @@
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
+import { SITE } from "./site";
 
 /**
  * SSRF guard for the careers-page scraper and news fetcher (plan §7):
@@ -45,7 +46,7 @@ export async function safeFetch(
     const res = await fetch(url, {
       redirect: "manual",
       signal: AbortSignal.timeout(timeoutMs),
-      headers: { "User-Agent": "GeeksFinderBot/1.0 (+https://geeksfinder.in/about)", ...headers },
+      headers: { "User-Agent": `GeeksFinderBot/1.0 (+${SITE.url}/about)`, ...headers },
     });
     if (res.status >= 300 && res.status < 400 && res.headers.get("location")) {
       current = new URL(res.headers.get("location")!, url).toString();
