@@ -50,13 +50,15 @@ export const whatsappExtra = (period: Period) => PLANS[planCode(period, true)].p
 
 /** Razorpay plan id for a plan code. The ₹10 plan falls back to the earlier RAZORPAY_PLAN_ID_HUSTLE / RAZORPAY_PLAN_ID (same price). */
 export function razorpayPlanId(plan: PaidPlan): string | undefined {
+  // Same tidy-up as lib/razorpay.ts envValue (kept inline: this file is also used by client components)
+  const clean = (v: string | undefined) => (v ?? "").trim().replace(/^["']|["']$/g, "").trim() || undefined;
   const env = {
-    pro_15: process.env.RAZORPAY_PLAN_ID_PRO_15 ?? process.env.RAZORPAY_PLAN_ID_HUSTLE ?? process.env.RAZORPAY_PLAN_ID,
-    pro_30: process.env.RAZORPAY_PLAN_ID_PRO_30,
-    pro_wa_15: process.env.RAZORPAY_PLAN_ID_PRO_WA_15,
-    pro_wa_30: process.env.RAZORPAY_PLAN_ID_PRO_WA_30,
+    pro_15: clean(process.env.RAZORPAY_PLAN_ID_PRO_15) ?? clean(process.env.RAZORPAY_PLAN_ID_HUSTLE) ?? clean(process.env.RAZORPAY_PLAN_ID),
+    pro_30: clean(process.env.RAZORPAY_PLAN_ID_PRO_30),
+    pro_wa_15: clean(process.env.RAZORPAY_PLAN_ID_PRO_WA_15),
+    pro_wa_30: clean(process.env.RAZORPAY_PLAN_ID_PRO_WA_30),
   };
-  return env[plan] || undefined;
+  return env[plan];
 }
 
 /** Reverse lookup used by the webhook: Razorpay's plan_id is the authority on what was bought. */

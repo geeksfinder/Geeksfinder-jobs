@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { PAID_PLANS, PLANS, razorpayPlanId } from "@/lib/pricing";
-import { rzp } from "@/lib/razorpay";
+import { envValue, rzp } from "@/lib/razorpay";
 import { rateLimit } from "@/lib/ratelimit";
 import { badRequest, fail, tooMany, unauthorized } from "@/lib/security";
 import { adminClient, requireUser } from "@/lib/supabase/server";
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
       plan_code: plan,
       trial_end: new Date(startAt * 1000).toISOString(),
     });
-    return NextResponse.json({ subscriptionId: sub.id, keyId: process.env.RAZORPAY_KEY_ID, email: user.email, plan });
+    return NextResponse.json({ subscriptionId: sub.id, keyId: envValue(process.env.RAZORPAY_KEY_ID), email: user.email, plan });
   } catch (e) {
     return fail("razorpay.subscribe", e, "Couldn't start checkout. Try again in a minute.", 502);
   }

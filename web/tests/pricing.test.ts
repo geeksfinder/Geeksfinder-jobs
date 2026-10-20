@@ -71,7 +71,7 @@ describe("checkout", () => {
     const q = { select: () => q, eq: () => q, maybeSingle: async () => ({ data: null }), upsert };
     vi.doMock("@/lib/supabase/server", () => ({ requireUser: async () => ({ user: { id: "u1", email: "a@b.c" } }), adminClient: () => ({ from: () => q }) }));
     vi.doMock("@/lib/ratelimit", () => ({ rateLimit: async () => ({ ok: true }) }));
-    vi.doMock("@/lib/razorpay", () => ({ rzp }));
+    vi.doMock("@/lib/razorpay", () => ({ rzp, envValue: (v?: string) => (v ?? "").trim() }));
     return { rzp, upsert };
   }
   const post = (plan: unknown) => new Request("http://localhost:3000/api/razorpay/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ plan }) });
@@ -104,5 +104,14 @@ describe("checkout", () => {
     expect(res.status).toBe(409);
     expect((await res.json()).error).toMatch(/WhatsApp alerts aren't available yet/);
     expect(m.rzp).not.toHaveBeenCalled();
+  });
+});
+
+describe("pasted Razorpay values", () => {
+  it("ignore stray spaces, line breaks and quotes", async () => {
+    const { envValue } = await vi.importActual<typeof import("@/lib/razorpay")>("@/lib/razorpay");
+    expect(envValue(" rzp_live_abc \n")).toBe("rzp_live_abc");
+    expect(envValue('"plan_X"')).toBe("plan_X");
+    expect(envValue(undefined)).toBe("");
   });
 });

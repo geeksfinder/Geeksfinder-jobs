@@ -4,6 +4,8 @@ import { Badge } from "@/components/ui/Highlighter";
 import { requireAdmin } from "@/lib/admin/auth";
 import { ADMIN_ROLES, AREA_ROLES, FLAGS, SPEND_PROVIDERS, type FlagKey, type SpendProvider } from "@/lib/admin/constants";
 import { monthSpend } from "@/lib/admin/spend";
+import { PAID_PLANS, PLANS, razorpayPlanId } from "@/lib/pricing";
+import { paymentsSetupCheck } from "@/lib/razorpay";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +45,10 @@ export default async function System({ searchParams }: { searchParams: Promise<T
     admin.from("deletion_requests").select("id, requested_by, requested_at, completed_at").order("requested_at", { ascending: false }).limit(20),
   ]);
   const spend = await Promise.all(SPEND_PROVIDERS.map((p) => monthSpend(p, admin).catch(() => null)));
+  // WhatsApp plans are only checked once they're configured
+  const payments = await paymentsSetupCheck(
+    PAID_PLANS.filter((p) => !PLANS[p].whatsapp || razorpayPlanId(p)).map((p) => ({ label: `${PLANS[p].name}, ₹${PLANS[p].price} ${PLANS[p].every}`, id: razorpayPlanId(p) })),
+  ).catch(() => [{ label: "Razorpay", ok: false, detail: "Couldn't reach Razorpay." }]);
   const peopleIds = [...new Set([...(admins ?? []).map((a) => a.user_id), ...(log ?? []).map((l) => l.actor_id), ...(flags ?? []).map((f) => f.updated_by)].filter(Boolean))] as string[];
   const { data: people } = peopleIds.length ? await admin.from("users").select("id, email").in("id", peopleIds) : { data: [] };
   const email = (id: string | null) => (id ? (people ?? []).find((p) => p.id === id)?.email ?? "Removed account" : "System");
@@ -87,6 +93,19 @@ export default async function System({ searchParams }: { searchParams: Promise<T
             );
           })}
         </div>
+      </section>
+
+      <section id="payments" aria-labelledby="pay-h" className="mt-10 scroll-mt-6">
+        <h2 id="pay-h" className="mb-1 text-h3 font-semibold">Payments setup</h2>
+        <p className="mb-3 text-small text-ink-2">Checked live against Razorpay each time this page loads. No secrets are shown.</p>
+        <dl className="panel divide-y divide-line">
+          {payments.map((c) => (
+            <div key={c.label} className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 py-3">
+              <dt className="text-body font-medium">{c.label}</dt>
+              <dd className={`text-small ${c.ok ? "text-success" : "text-danger"}`}>{c.ok ? "OK" : "Problem"} · <span className="text-ink-2">{c.detail}</span></dd>
+            </div>
+          ))}
+        </dl>
       </section>
 
       <section id="caps" aria-labelledby="caps-h" className="mt-10 scroll-mt-6">

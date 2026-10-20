@@ -1,7 +1,7 @@
 <!-- Converted from spec.pdf (the original, kept beside this file). Tables were flattened by the PDF export:
      when a table row reads oddly here, spec.pdf is the source of truth. -->
 
-Oct 19, 2026 · ​@digidiploma
+Oct 19, 2026 · 
 
 ## 1. Scope and how to use this doc
 This spec adds three things to GeeksFinder: WhatsApp morning alerts as a paid "Pro + WhatsApp" plan at ₹29 per 15 days, a full admin panel that covers operations, money, marketing and the visit-to-paid funnel, and a content quality bot that auto-publishes only low-risk blog articles that pass every check (section 10). It builds on the business plan, DESIGN.md and the LinkedIn spec, and changes nothing in them except where it says so.

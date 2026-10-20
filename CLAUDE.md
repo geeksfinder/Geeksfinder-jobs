@@ -20,5 +20,6 @@ If a design decision is not covered by DESIGN.md, ask before choosing.
 - `npm run dev` · `npm run build` · `npm run lint`
 - `npm run cron:ingest` / `cron:notify` / `cron:news`
 
-## WhatsApp and admin
-WhatsApp and admin work follows docs/whatsapp-admin/SPEC.md. The hard rules in its section 1 and the security rules in its section 7 override anything else.
+
+new feartures to include in web but later after my approve
+Off-campus drive calendar,“Unlock” skill gaps using your own data.,Alumni referral bridge,
