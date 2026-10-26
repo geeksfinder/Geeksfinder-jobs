@@ -3,19 +3,18 @@
  * New jobs keep their line breaks from the source; older ones were flattened to one line,
  * so for those we break before common section headings and group sentences into short paragraphs.
  */
-const decodeEntities = (s: string) =>
-  s.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
+import { decodeEntities, stripTags } from "./html-text";
 
-/** HTML job post → plain text that keeps paragraph, heading and list structure as line breaks. */
+/**
+ * HTML job post → plain text that keeps paragraph, heading and list structure as line breaks.
+ * `encoded`: the feed sends HTML that is itself entity-encoded (Greenhouse), so it's decoded once into HTML first.
+ * Tags and entities are handled by lib/html-text.ts (tags removed until none are left; entities decoded once).
+ */
 export function htmlToText(html: string, { encoded = false } = {}) {
-  return (encoded ? decodeEntities(html) : html)
+  const structured = (encoded ? decodeEntities(html) : html)
     .replace(/<\s*li\b[^>]*>/gi, "\n• ")
-    .replace(/<\s*(br|\/p|\/div|\/h[1-6]|h[1-6]|\/li|\/ul|\/ol|\/tr)\b[^>]*>/gi, "\n")
-    .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;|&#160;/g, " ")
-    .replace(/&amp;/g, "&")
-    .replace(/&#39;|&rsquo;/g, "’")
-    .replace(/&quot;|&ldquo;|&rdquo;/g, '"')
+    .replace(/<\s*(br|\/p|\/div|\/h[1-6]|h[1-6]|\/li|\/ul|\/ol|\/tr)\b[^>]*>/gi, "\n");
+  return stripTags(decodeEntities(stripTags(structured)))
     .replace(/[^\S\n]+/g, " ")
     .replace(/ *\n */g, "\n")
     .replace(/\n{3,}/g, "\n\n")

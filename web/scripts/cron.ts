@@ -8,6 +8,7 @@ import { readFileSync } from "node:fs";
 import { withCronRun, type CronContext } from "@/lib/admin/cron-run";
 import { getFlag } from "@/lib/admin/flags";
 import { syncJobCompanies } from "@/lib/company-sync";
+import { plainText } from "@/lib/html-text";
 import { resolvePlan, tier, type Grant } from "@/lib/entitlement";
 import { generateJSON, untrusted } from "@/lib/ai";
 import { sendEmail } from "@/lib/email";
@@ -148,7 +149,7 @@ async function fetchAdzuna(queries: string[]): Promise<RawJob[]> {
         out.push({
           source: "adzuna",
           source_id: String(j.id),
-          title: j.title.replace(/<[^>]+>/g, ""),
+          title: plainText(j.title),
           company: j.company?.display_name ?? "Unknown",
           company_domain: null,
           location: j.location?.display_name ?? "India",

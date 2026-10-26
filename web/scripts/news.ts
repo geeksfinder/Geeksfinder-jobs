@@ -13,6 +13,7 @@ import { runChecks } from "@/lib/article-checks";
 import { aiReview, canAutoPublish, seoReview, type AiReview, type SeoResult } from "@/lib/article-review";
 import { GUIDES_PER_DAY, NEWS_PER_DAY, writeArticle, type ArticleDraft, type ArticleKind, type Fact } from "@/lib/articles";
 import { publishDraft } from "@/lib/publish";
+import { decodeEntities, plainText } from "@/lib/html-text";
 import { safeFetch } from "@/lib/safe-fetch";
 import { adminClient } from "@/lib/supabase/admin";
 
@@ -21,9 +22,10 @@ const log = (...a: unknown[]) => console.log(new Date().toISOString(), ...a);
 
 type Item = { source_id: string; url: string; title: string; published_at: string | null; text: string; publisher: string | null };
 
-const decode = (s: string) =>
-  s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, "&");
-const stripTags = (s: string) => decode(s).replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+// Feeds wrap text in CDATA and often entity-encode their HTML; lib/html-text.ts decodes once and strips every tag
+const unwrapCdata = (s: string) => s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1");
+const decode = (s: string) => decodeEntities(unwrapCdata(s));
+const stripTags = (s: string) => plainText(unwrapCdata(s));
 const tag = (xml: string, name: string) => xml.match(new RegExp(`<${name}[^>]*>([\\s\\S]*?)</${name}>`, "i"))?.[1] ?? "";
 /** Feeds wrap dates in CDATA or use odd formats; an unreadable date must not drop the whole feed. */
 const rssDate = (raw: string) => {
@@ -39,7 +41,7 @@ const host = (u: string) => { try { return new URL(u).hostname.replace(/^www\./,
 function articleText(html: string) {
   const art = html.match(/<article[\s\S]*?<\/article>/i)?.[0] ?? html;
   const paras = [...art.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)].map((m) => stripTags(m[1])).filter((p) => p.length > 40).join("\n");
-  const ld = [...html.matchAll(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)]
+  const ld = [...html.matchAll(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script\b[^>]*>/gi)]
     .map((m) => {
       try {
         const j = JSON.parse(m[1]);
