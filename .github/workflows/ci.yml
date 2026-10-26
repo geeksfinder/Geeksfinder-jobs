@@ -7,6 +7,10 @@ on:
   schedule:
     - cron: "0 3 * * 1" # weekly dependency audit (Mondays)
 
+# Read-only token: a pull request (including one from a stranger's fork) can't push or change settings
+permissions:
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -20,6 +24,13 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: web/package-lock.json
+      # Public repo: fail if anything shaped like an API key, token or password is committed (.github/secret-patterns.txt)
+      - name: No secrets in the code
+        working-directory: .
+        run: |
+          if git grep -I -n -E -f .github/secret-patterns.txt -- . ':!web/package-lock.json' ':!.github/secret-patterns.txt'; then
+            echo "Something that looks like a secret is committed. Move it to an env var (web/.env.example lists them)."; exit 1
+          fi
       - run: npm ci
       - run: npm run lint
       - run: npx tsc --noEmit

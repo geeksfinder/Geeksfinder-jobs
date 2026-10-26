@@ -2,8 +2,8 @@ name: Scheduled pipelines
 
 on:
   schedule:
-    # Private repo: free plan has 2,000 Actions minutes a month, so the schedule is trimmed to fit (~1,500 min).
-    # Times are UTC; IST = UTC + 5:30.
+    # Times are UTC; IST = UTC + 5:30. (Public repo: Actions minutes are unlimited. As a private repo this schedule
+    # used about 1,500 of the free 2,000 minutes a month.)
     - cron: "30 0 * * *"      # 06:00 IST — fetch, dedupe, enrich, match (before the 7:30 alerts)
     - cron: "0 0-17 * * *"    # hourly 05:30–22:30 IST — alerts for users whose alert time is now (alert hours are 5–22)
     - cron: "15 3,13 * * *"   # 08:45 and 18:45 IST — news + guides → reviewed drafts (auto-published when every check passes)
@@ -14,6 +14,10 @@ on:
         description: "ingest | notify | news | report"
         required: true
         default: ingest
+
+# The built-in GitHub token can only read the code: no pushes, releases or settings changes from a job
+permissions:
+  contents: read
 
 concurrency:
   group: pipeline-${{ github.event.schedule || inputs.task }}
@@ -47,6 +51,11 @@ jobs:
       INDEXNOW_KEY: ${{ secrets.INDEXNOW_KEY }}                 # tells Bing about new articles
       JSEARCH_RUNS_PER_DAY: "1"   # the cloud fetches jobs once a day (06:00 IST); each run gets the full daily share of the free quota
       AUTO_PUBLISH: ${{ secrets.AUTO_PUBLISH }}   # optional secret: set it to 0 to stop blog auto-publishing (drafts then wait for review)
+      # Optional: public values the alerts and emails show. Leave unset to use the defaults in web/src/lib/site.ts.
+      NEXT_PUBLIC_TELEGRAM_BOT_USERNAME: ${{ secrets.NEXT_PUBLIC_TELEGRAM_BOT_USERNAME }}
+      NEXT_PUBLIC_TELEGRAM_CHANNEL: ${{ secrets.NEXT_PUBLIC_TELEGRAM_CHANNEL }}
+      NEXT_PUBLIC_CONTACT_EMAIL: ${{ secrets.NEXT_PUBLIC_CONTACT_EMAIL }}
+      ADMIN_TELEGRAM_CHAT_ID: ${{ secrets.ADMIN_TELEGRAM_CHAT_ID }}   # optional: admin alerts go to owners' Telegram if unset
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
