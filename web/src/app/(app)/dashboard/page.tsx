@@ -28,7 +28,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     supabase.from("subscriptions").select("current_period_end").eq("user_id", user!.id).maybeSingle(),
     supabase
       .from("matches")
-      .select("score, reasons, created_at, jobs(id, title, company, company_domain, location, remote, fresher_friendly, skills, posted_at, deadline, apply_url)")
+      .select("score, reasons, created_at, jobs(id, title, company, company_domain, location, remote, fresher_friendly, skills, posted_at, apply_url)")
       .eq("user_id", user!.id)
       .order("created_at", { ascending: false })
       .order("score", { ascending: false })

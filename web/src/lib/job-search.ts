@@ -9,7 +9,7 @@ export type JobRow = { score: number; reasons: MatchReasons; created_at: string;
 
 const DAY = 86_400_000;
 export const SEARCH_LIMIT = 100;
-const JOB_COLS = "id, title, company, company_domain, location, remote, fresher_friendly, skills, posted_at, deadline, apply_url, created_at";
+const JOB_COLS = "id, title, company, company_domain, location, remote, fresher_friendly, skills, posted_at, apply_url, created_at";
 
 /** Search-box text → safe plain text: letters, numbers and a few symbols used in skills (C++, C#, Node.js, UI/UX). */
 export function cleanTerm(s: string | undefined) {
