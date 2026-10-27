@@ -111,7 +111,7 @@ export async function firstMatches(): Promise<FirstMatch[]> {
   await matchNow(adminClient(), user.id);
   const { data } = await supabase
     .from("matches")
-    .select("score, reasons, jobs(id, title, company, company_domain, location, remote, fresher_friendly, skills, posted_at)")
+    .select("score, reasons, jobs(id, title, company, company_domain, location, remote, fresher_friendly, skills, posted_at, deadline)")
     .eq("user_id", user.id)
     .gte("score", MATCH_THRESHOLD)
     .order("score", { ascending: false })

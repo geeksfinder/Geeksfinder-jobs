@@ -32,7 +32,7 @@ export type Article = {
   updated_at: string | null;
 };
 
-const JOB_COLS = "id, title, company, company_domain, location, remote, fresher_friendly, skills, posted_at";
+const JOB_COLS = "id, title, company, company_domain, location, remote, fresher_friendly, skills, posted_at, deadline";
 const FRESH = () => new Date(Date.now() - 21 * 86_400_000).toISOString();
 
 /** 3 live fresher jobs related to an article's skills (falls back to latest fresher jobs). */
