@@ -99,6 +99,7 @@ export const AlertsBody = z.object({
 
 export const TestAlertBody = z.object({ channel: z.enum(["telegram", "email"]) });
 
+export const CoverLetterEditBody = z.object({ jobId: uuid, body: text(5000).min(50, "Your letter looks empty. Write a few lines first.") });
 export const ReportBody = z.object({ jobId: uuid, reason: z.enum(["expired", "scam", "wrong_info", "other"]) });
 export const StageBody = z.object({ jobId: uuid, stage: z.enum(["saved", "applied", "interview", "offer", "rejected"]) });
 

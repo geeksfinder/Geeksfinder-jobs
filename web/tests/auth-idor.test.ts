@@ -33,6 +33,7 @@ describe("every user API route requires a session", () => {
   const cases: [string, () => Promise<{ POST?: (r: Request, ctx?: never) => Promise<Response>; GET?: (r: Request, ctx: never) => Promise<Response> }>, unknown][] = [
     ["/api/tailor", () => import("@/app/api/tailor/route"), { jobId: JOB }],
     ["/api/outreach", () => import("@/app/api/outreach/route"), { jobId: JOB }],
+    ["/api/cover-letter", () => import("@/app/api/cover-letter/route"), { jobId: JOB }],
     ["/api/outreach/sent", () => import("@/app/api/outreach/sent/route"), { jobId: JOB, channel: "email" }],
     ["/api/account/delete", () => import("@/app/api/account/delete/route"), {}],
     ["/api/razorpay/subscribe", () => import("@/app/api/razorpay/subscribe/route"), {}],
@@ -71,6 +72,38 @@ describe("IDOR", () => {
     const { GET } = await import("@/app/api/tailor/[id]/pdf/route");
     const res = await GET(new Request("http://localhost"), { params: Promise.resolve({ id: "1" }) });
     expect(res.status).toBe(404);
+  });
+});
+
+describe("cover letters", () => {
+  const patch = (body: unknown) => new Request("http://localhost/api", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  it("editing and the PDF need a session", async () => {
+    const { PATCH } = await import("@/app/api/cover-letter/route");
+    expect((await PATCH(patch({ jobId: JOB, body: "x".repeat(60) }))).status).toBe(401);
+    const { GET } = await import("@/app/api/cover-letter/[id]/pdf/route");
+    expect((await GET(new Request("http://localhost"), { params: Promise.resolve({ id: JOB }) })).status).toBe(401);
+  });
+  it("is written only from the student's own tailored resume, so an untailored job is refused", async () => {
+    state.user = { id: "user-a" };
+    const { POST } = await import("@/app/api/cover-letter/route");
+    const res = await POST(json({ jobId: JOB }));
+    expect(res.status).toBe(409);
+    expect(state.filters).toContainEqual(["user_id", "user-a"]);
+  });
+  it("edits and PDFs only touch the signed-in student's letter", async () => {
+    state.user = { id: "user-a" };
+    const { PATCH } = await import("@/app/api/cover-letter/route");
+    expect((await PATCH(patch({ jobId: JOB, body: "Dear Hiring Manager, ".repeat(4) }))).status).toBe(404);
+    expect(state.filters).toContainEqual(["user_id", "user-a"]);
+    state.filters = [];
+    const { GET } = await import("@/app/api/cover-letter/[id]/pdf/route");
+    expect((await GET(new Request("http://localhost"), { params: Promise.resolve({ id: JOB }) })).status).toBe(404);
+    expect(state.filters).toContainEqual(["user_id", "user-a"]);
+  });
+  it("refuses an empty letter", async () => {
+    state.user = { id: "user-a" };
+    const { PATCH } = await import("@/app/api/cover-letter/route");
+    expect((await PATCH(patch({ jobId: JOB, body: "too short" }))).status).toBe(400);
   });
 });
 

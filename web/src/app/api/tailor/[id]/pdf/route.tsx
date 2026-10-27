@@ -1,4 +1,5 @@
-import { Document, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
+import { Document, Page, Text, View, renderToBuffer } from "@react-pdf/renderer";
+import { pdf as s } from "@/lib/pdf-styles";
 import type { ParsedResume } from "@/lib/ai";
 import { applyChoices, loadResume } from "@/lib/resume";
 import { adminRole } from "@/lib/admin/auth";
@@ -7,16 +8,6 @@ import { adminClient, requireUser } from "@/lib/supabase/server";
 import { TailorPdfBody, uuid } from "@/lib/validate";
 
 export const runtime = "nodejs";
-
-// Single-column, plain text, standard fonts: ATS parsers read it cleanly. (PDF colours are document values, not UI tokens.)
-const s = StyleSheet.create({
-  page: { padding: 40, fontSize: 10, fontFamily: "Times-Roman", lineHeight: 1.4, color: "#14213D" },
-  name: { fontSize: 18, fontFamily: "Times-Bold" },
-  contact: { marginTop: 2, color: "#4A5568" },
-  h: { marginTop: 12, marginBottom: 4, fontSize: 10.5, fontFamily: "Helvetica-Bold", borderBottom: "0.75 solid #7A8494", paddingBottom: 2 },
-  bold: { fontFamily: "Times-Bold" },
-  item: { marginBottom: 6 },
-});
 
 function ResumePDF({ r }: { r: ParsedResume }) {
   return (

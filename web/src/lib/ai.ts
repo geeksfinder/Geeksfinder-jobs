@@ -177,6 +177,28 @@ Copy facts exactly; use "" or [] when the notice doesn't say. Never invent dates
 ${untrusted("notice", text, 20000)}`;
 }
 
+/**
+ * Cover letter from the student's tailored resume for this job. Same honesty rules as tailoring: nothing the resume
+ * doesn't say. Plain, short, Indian fresher context; no clichés.
+ */
+export function coverLetterPrompt(resume: ParsedResume, job: { title: string; company: string; description: string }, tooShort?: number) {
+  return `Write a cover letter from a fresher for the job below, using only facts from their resume. STRICT RULES:
+- 180 to 250 words: count them. If it's short, add true detail from the resume (what a project did and how, the degree
+  and college, a second relevant project or internship), never filler.${tooShort ? ` Your last draft was only ${tooShort} words.` : ""}
+- Start with "Dear Hiring Manager," and end with "Sincerely," then the student's name on the next line.
+- Three short paragraphs: why this role at this company; two or three things from the resume that fit what the job asks
+  (name the real project, internship or skill); a one-line close asking for an interview.
+- Never add skills, tools, companies, projects, degrees, grades or numbers that are not in the resume. If the job asks for
+  something the resume doesn't have, leave it out rather than claim it.
+- Plain, confident English. No clichés ("I am writing to express", "esteemed organisation", "passionate", "hardworking"),
+  no exclamation marks, no placeholders like [Company].
+Return JSON: {"letter": string} with paragraphs separated by a blank line.
+
+${untrusted("job", `${job.title} at ${job.company}\n${job.description}`, 6000)}
+
+${untrusted("resume_json", JSON.stringify(resume))}`;
+}
+
 export function tailorPrompt(resume: ParsedResume, job: { title: string; company: string; description: string }) {
   return `Tailor a student's resume to a job. STRICT RULES:
 - REPHRASE ONLY. Never add skills, tools, companies, projects, degrees or numbers that are not in the original.

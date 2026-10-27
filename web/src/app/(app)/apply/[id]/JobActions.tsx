@@ -7,6 +7,7 @@ import { setStage } from "@/app/(app)/tracker/actions";
 import { Button, ButtonLink } from "@/components/ui/Button";
 import { ResumeDiff, type DiffLine } from "@/components/ui/ResumeDiff";
 import { useToast } from "@/components/ui/Toast";
+import { CoverLetter } from "./CoverLetter";
 
 type Draft = { contact: { email: string; name?: string; role?: string; source: string } | null; subject: string; email: string; linkedin_note: string };
 type Err = { msg: string; upgrade?: boolean } | null;
@@ -105,6 +106,7 @@ function Tailor({ jobId, applyUrl }: { jobId: string; applyUrl: string | null })
           Apply with this resume <ExternalLink size={16} strokeWidth={1.5} aria-hidden />
         </a>
       )}
+      <CoverLetter jobId={jobId} />
     </div>
   );
 }
