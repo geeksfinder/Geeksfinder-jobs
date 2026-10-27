@@ -1,7 +1,9 @@
 import { Document, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
 import type { ParsedResume } from "@/lib/ai";
 import { applyChoices, loadResume } from "@/lib/resume";
-import { requireUser } from "@/lib/supabase/server";
+import { adminRole } from "@/lib/admin/auth";
+import { log } from "@/lib/security";
+import { adminClient, requireUser } from "@/lib/supabase/server";
 import { TailorPdfBody, uuid } from "@/lib/validate";
 
 export const runtime = "nodejs";
@@ -59,7 +61,15 @@ async function render(id: string, accepted?: Record<string, string>) {
   const tailored = data.content as ParsedResume;
   const original = accepted ? await loadResume(supabase, user.id) : null;
   const resume = original ? applyChoices(original, tailored, accepted) : tailored;
-  const buf = await renderToBuffer(<ResumePDF r={resume} />);
+  let buf: Buffer;
+  try {
+    buf = await renderToBuffer(<ResumePDF r={resume} />);
+  } catch (e) {
+    // Logged for Vercel; admins also see the reason, so a failure in production can be diagnosed without log access
+    log.error("tailor.pdf", e);
+    const detail = (await adminRole(adminClient(), user.id)) ? ` (${(e as Error).message})` : "";
+    return new Response(`Couldn't create the PDF. Try again.${detail}`, { status: 500 });
+  }
   const company = ((data.jobs as unknown as { company: string } | null)?.company ?? "job").replace(/[^a-z0-9]+/gi, "_");
   const name = (resume.name || "Resume").replace(/[^a-z0-9]+/gi, "_");
   return new Response(new Uint8Array(buf), {
