@@ -1,11 +1,6 @@
 import { NextResponse } from "next/server";
 
-export { safeNext } from "./security-client";
-
-/** Uploaded file really is a PDF (magic bytes %PDF-), not a renamed .exe. */
-export function isPdf(bytes: Uint8Array) {
-  return bytes.length > 5 && bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46 && bytes[4] === 0x2d;
-}
+export { isPdf, safeNext } from "./security-client";
 
 /** Remove newlines/control chars that enable header injection (email subject, names). */
 export const oneLine = (s: string, max = 200) => s.replace(/[\r\n\t\u0000-\u001f\u007f]+/g, " ").trim().slice(0, max);

@@ -3,6 +3,7 @@
 import { Copy } from "lucide-react";
 import { useState } from "react";
 import { Turnstile } from "@/components/app/Turnstile";
+import { ResumeUpload } from "@/components/app/ResumeUpload";
 import { Button } from "@/components/ui/Button";
 
 type Out = { subject: string; email: string; linkedin_note: string };
@@ -32,7 +33,8 @@ export function HrEmailTool() {
     <div className="mt-8">
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <label htmlFor="hr-resume" className="label">Your resume text</label>
+          <ResumeUpload onText={(t) => setResume(t.slice(0, 15000))} note="We read the PDF on your device and send only its text to write the email." />
+          <label htmlFor="hr-resume" className="label mt-4">Your resume text</label>
           <textarea id="hr-resume" rows={12} className="input h-auto py-2 font-serif text-resume" value={resume} onChange={(e) => setResume(e.target.value)} maxLength={15000} />
         </div>
         <div>

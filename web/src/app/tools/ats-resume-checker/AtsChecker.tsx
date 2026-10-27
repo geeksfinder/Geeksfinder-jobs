@@ -2,6 +2,7 @@
 
 import { Check, X } from "lucide-react";
 import { useState } from "react";
+import { ResumeUpload } from "@/components/app/ResumeUpload";
 import { Button } from "@/components/ui/Button";
 import { SkillChip } from "@/components/ui/Highlighter";
 import { checkAts, type AtsResult } from "@/lib/ats";
@@ -13,7 +14,7 @@ export function AtsChecker() {
   const [err, setErr] = useState("");
 
   function run() {
-    if (resume.trim().split(/\s+/).length < 50) return setErr("Paste your full resume text (at least a few lines).");
+    if (resume.trim().split(/\s+/).length < 50) return setErr("Choose your resume PDF, or paste your full resume text.");
     if (job.trim().split(/\s+/).length < 20) return setErr("Paste the full job description.");
     setErr("");
     setResult(checkAts(resume, job));
@@ -23,8 +24,9 @@ export function AtsChecker() {
     <div className="mt-8">
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <label htmlFor="ats-resume" className="label">Your resume text</label>
-          <textarea id="ats-resume" rows={14} className="input h-auto py-2 font-serif text-resume" value={resume} onChange={(e) => setResume(e.target.value)} placeholder="Open your resume, select all, copy and paste here" />
+          <ResumeUpload onText={setResume} note="Read on your phone or laptop. Your resume is never uploaded." />
+          <label htmlFor="ats-resume" className="label mt-4">Your resume text</label>
+          <textarea id="ats-resume" rows={14} className="input h-auto py-2 font-serif text-resume" value={resume} onChange={(e) => setResume(e.target.value)} placeholder="Choose your PDF above, or paste your resume text here" />
         </div>
         <div>
           <label htmlFor="ats-job" className="label">Job description</label>
