@@ -206,9 +206,10 @@ export const ROLE_NAMES = ROLES.map((r) => r.name);
  * Every role, best first for this student: roles their skills point to (more matching skills first, their branch
  * breaking ties), then the rest of their branch, then everything else. The tag input shows the top 8 until they type.
  */
-export function suggestRoles(skills: string[]): string[] {
+export function suggestRoles(skills: string[], chosen?: Branch | null): string[] {
   const mine = new Set(skills.map((s) => skillKey(canonicalSkill(s))));
-  const branch = likelyBranch(skills);
+  // The branch the student picked, else the one their skills point to
+  const branch = chosen ?? likelyBranch(skills);
   const fit = (r: Role) => r.signals.filter((s) => mine.has(skillKey(s))).length * 2 + (r.branch === branch ? 1 : 0);
   return ROLES.map((r, i) => ({ r, i, fit: fit(r) }))
     .sort((a, b) => b.fit - a.fit || a.i - b.i)

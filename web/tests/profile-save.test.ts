@@ -26,3 +26,20 @@ describe("profile save", () => {
     expect(fitParsedProfile({}).education).toEqual([]);
   });
 });
+
+describe("branch on the profile", () => {
+  it("accepts a known branch or none, nothing else", () => {
+    expect(ProfileBody.safeParse({ ...base, education: [], branch: "mechanical" }).success).toBe(true);
+    expect(ProfileBody.safeParse({ ...base, education: [], branch: null }).success).toBe(true);
+    expect(ProfileBody.safeParse({ ...base, education: [] }).success).toBe(true);
+    expect(ProfileBody.safeParse({ ...base, education: [], branch: "aero" }).success).toBe(false);
+  });
+});
+
+describe("last date", () => {
+  it("shows the notice's own date", async () => {
+    const { lastDate } = await import("@/lib/format");
+    expect(lastDate("2026-11-18")).toBe("Last date 18 Nov");
+    expect(lastDate("not a date")).toBe("");
+  });
+});

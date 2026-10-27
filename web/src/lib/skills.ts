@@ -4,7 +4,9 @@
  * in a job, and a mechanical student's "SolidWorks" is recognised like a developer's "Python". Pure data + helpers:
  * safe for client components, scripts and tests. Add a skill here and every feature learns it.
  */
-export type Branch = "cs" | "entc" | "electrical" | "mechanical" | "civil" | "chemical" | "general";
+/** Branch ids; names and searches live in lib/branches.ts. Same list as the profiles.branch check (migration 017). */
+export const BRANCH_IDS = ["cs", "entc", "electrical", "mechanical", "civil", "chemical", "general"] as const;
+export type Branch = (typeof BRANCH_IDS)[number];
 type Skill = { name: string; aliases?: string[]; branch: Branch };
 
 export const SKILL_LIST: Skill[] = [

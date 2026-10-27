@@ -6,6 +6,7 @@ import { saveProfile } from "@/app/onboarding/actions";
 import { TagInput } from "@/components/app/TagInput";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
+import { BranchSelect } from "@/components/app/BranchSelect";
 import { suggestRoles } from "@/lib/branches";
 import { INDIA_CITIES, tidyCity } from "@/lib/cities";
 import { PROFILE_MAX, type ProfileInput } from "@/lib/validate";
@@ -42,7 +43,8 @@ export function ProfileEditor({ initial }: { initial: ProfileInput }) {
       </div>
 
       <TagInput label="Skills" values={p.skills} onChange={(v) => set("skills", v)} placeholder="Add a skill" />
-      <TagInput label="Roles you want" values={p.preferred_roles} onChange={(v) => set("preferred_roles", v)} placeholder={suggestRoles(p.skills)[0]} suggestions={suggestRoles(p.skills)} max={10} />
+      <BranchSelect id="pf-branch" value={p.branch ?? null} onChange={(b) => set("branch", b)} />
+      <TagInput label="Roles you want" values={p.preferred_roles} onChange={(v) => set("preferred_roles", v)} placeholder={suggestRoles(p.skills, p.branch)[0]} suggestions={suggestRoles(p.skills, p.branch)} max={10} />
       <TagInput label="Cities" hint="Add Remote to include remote jobs." values={p.locations} onChange={(v) => set("locations", v)} placeholder="Pune" suggestions={INDIA_CITIES} normalize={tidyCity} max={10} />
 
       <div className="grid gap-4 sm:grid-cols-2">

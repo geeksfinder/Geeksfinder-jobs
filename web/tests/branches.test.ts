@@ -90,3 +90,11 @@ describe("report this job", () => {
     expect(hideDecision(["wrong_info", "other", "scam"])).toEqual({ hide: true, reason: "other" });
   });
 });
+
+describe("chosen branch", () => {
+  it("ranks roles by the branch the student picked when skills don't say", () => {
+    expect(suggestRoles(["Teamwork"], "civil")[0]).toBe("Civil Engineer");
+    expect(suggestRoles(["Excel"], "civil")[0]).toBe("Quantity Surveyor");
+    expect(suggestRoles(["AutoCAD"], "electrical").slice(0, 3)).toContain("Electrical Design Engineer");
+  });
+});

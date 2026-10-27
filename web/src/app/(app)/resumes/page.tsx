@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { likelyBranch } from "@/lib/skills";
 import { ButtonLink } from "@/components/ui/Button";
 import { shortDate } from "@/lib/format";
 import { requireUser } from "@/lib/supabase/server";
@@ -40,6 +41,7 @@ export default async function Resumes() {
               preferred_roles: p.preferred_roles ?? [],
               locations: p.locations ?? [],
               job_type: p.job_type ?? "full-time",
+              branch: p.branch ?? likelyBranch(p.skills ?? []),
               experience_level: p.experience_level ?? "fresher",
               education: p.education ?? [],
               projects: p.projects ?? [],

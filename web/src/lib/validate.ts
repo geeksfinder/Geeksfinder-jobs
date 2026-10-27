@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ADMIN_ROLES, FLAGS, SPEND_PROVIDERS } from "./admin/constants";
+import { BRANCH_IDS } from "./skills";
 import { PhoneSchema } from "./whatsapp/phone";
 
 /** Request body schemas. Every API route parses its body with one of these. */
@@ -37,6 +38,7 @@ export const ProfileBody = z.object({
   preferred_roles: list(10, 80),
   locations: list(10, 60),
   job_type: z.enum(["full-time", "internship", "both"]),
+  branch: z.enum(BRANCH_IDS).nullable().optional(),
   experience_level: z.enum(["fresher", "0-1", "1-3"]),
   education: z
     .array(z.object({ institution: text(M.education.institution), degree: text(M.education.degree), year: text(M.education.year), score: text(M.education.score).optional() }))

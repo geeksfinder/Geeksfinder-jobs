@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import type { Branch } from "@/lib/skills";
 import { featureTier } from "@/lib/pricing";
 import { ToastProvider } from "@/components/ui/Toast";
 import { Wordmark } from "@/components/ui/Wordmark";
@@ -16,7 +17,7 @@ export default async function Onboarding({ searchParams }: { searchParams: Promi
   const review = sp.review === "1";
   const upload = sp.upload === "1";
   const [{ data: p }, { data: a }, { data: u }] = await Promise.all([
-    supabase.from("profiles").select("skills, preferred_roles, locations, job_type").eq("user_id", user.id).maybeSingle(),
+    supabase.from("profiles").select("skills, preferred_roles, locations, job_type, branch").eq("user_id", user.id).maybeSingle(),
     supabase.from("alert_settings").select("frequency, channels, alert_hour").eq("user_id", user.id).maybeSingle(),
     supabase.from("users").select("plan, telegram_chat_id, name, onboarded_at").eq("id", user.id).single(),
   ]);
@@ -38,6 +39,7 @@ export default async function Onboarding({ searchParams }: { searchParams: Promi
             roles: p?.preferred_roles ?? [],
             locations: p?.locations ?? [],
             jobType: (p?.job_type as "full-time" | "internship" | "both") ?? "full-time",
+            branch: (p?.branch as Branch | null) ?? null,
             frequency: a?.frequency ?? "weekly",
             channels: a?.channels ?? ["telegram"],
             alertHour: a?.alert_hour ?? 7,

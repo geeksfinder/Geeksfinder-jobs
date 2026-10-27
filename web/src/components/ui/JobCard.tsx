@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { cleanCompany } from "@/lib/company";
-import { city, timeAgo } from "@/lib/format";
+import { city, lastDate, timeAgo } from "@/lib/format";
 import { CompanyLogo } from "./CompanyLogo";
 import { Badge, SkillChip } from "./Highlighter";
 import { MatchScore, gapText, reasonText, type MatchReasons } from "./MatchScore";
@@ -15,6 +15,8 @@ export type JobCardJob = {
   fresher_friendly: boolean | null;
   skills: string[];
   posted_at: string | null;
+  /** Last date to apply (Govt & PSU notices). Shown instead of the posted time. */
+  deadline?: string | null;
 };
 
 type Props = {
@@ -60,7 +62,7 @@ export function JobCard({ job, score, reasons, mySkills, href, actions, showGap 
           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1.5">
             <p className="text-small text-ink-3">
               {cleanCompany(job.company)} · {where}
-              {job.posted_at ? ` · ${timeAgo(job.posted_at)}` : ""}
+              {job.deadline ? ` · ${lastDate(job.deadline)}` : job.posted_at ? ` · ${timeAgo(job.posted_at)}` : ""}
             </p>
             {job.fresher_friendly && <Badge>Fresher-friendly</Badge>}
             {job.remote && <Badge>Remote</Badge>}

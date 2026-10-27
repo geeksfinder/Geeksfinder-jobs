@@ -24,7 +24,7 @@ import { isPdf } from "@/lib/security";
 import { extractText, getDocumentProxy } from "unpdf";
 import { eligible } from "@/lib/match-now";
 import { MATCH_THRESHOLD, NEAR_THRESHOLD, scoreMatch } from "@/lib/matching";
-import { likelyBranch } from "@/lib/skills";
+import { likelyBranch, type Branch } from "@/lib/skills";
 import { adminClient } from "@/lib/supabase/admin";
 import { esc, sendTelegram } from "@/lib/telegram";
 import { unsubscribeUrl } from "@/lib/unsubscribe";
@@ -479,12 +479,12 @@ async function govtJobs(ctx: CronContext) {
 // ---------- Pipeline ----------
 
 async function ingest(ctx: CronContext) {
-  const { data: profiles } = await db.from("profiles").select("preferred_roles, skills");
+  const { data: profiles } = await db.from("profiles").select("preferred_roles, skills, branch");
   const roleCounts = new Map<string, number>();
   const perBranch: Record<string, number> = {};
   for (const p of profiles ?? []) {
     for (const r of p.preferred_roles ?? []) roleCounts.set(r.toLowerCase(), (roleCounts.get(r.toLowerCase()) ?? 0) + 1);
-    const branch = likelyBranch(p.skills ?? []);
+    const branch = (p.branch as Branch | null) ?? likelyBranch(p.skills ?? []);
     if (branch) perBranch[branch] = (perBranch[branch] ?? 0) + 1;
   }
   // Students' own roles (most asked first) mixed with every branch's searches (lib/branches.ts)

@@ -10,7 +10,9 @@ import { Button, ButtonLink } from "@/components/ui/Button";
 import { SkillChip } from "@/components/ui/Highlighter";
 import { JobCard } from "@/components/ui/JobCard";
 import { EmptyState, useToast } from "@/components/ui/Toast";
+import { BranchSelect } from "@/components/app/BranchSelect";
 import { suggestRoles } from "@/lib/branches";
+import { likelyBranch, type Branch } from "@/lib/skills";
 import { INDIA_CITIES, tidyCity } from "@/lib/cities";
 import { firstMatches, saveAlerts, savePreferences, saveSkills, type FirstMatch } from "./actions";
 
@@ -19,6 +21,7 @@ type Initial = {
   roles: string[];
   locations: string[];
   jobType: "full-time" | "internship" | "both";
+  branch: Branch | null;
   frequency: string;
   channels: string[];
   alertHour: number;
@@ -35,6 +38,9 @@ export function Wizard({ initial, review = false, startAtUpload = false }: { ini
   const [roles, setRoles] = useState(initial.roles);
   const [locations, setLocations] = useState(initial.locations.length ? initial.locations : ["Remote"]);
   const [jobType, setJobType] = useState(initial.jobType);
+  // Saved branch, or the one the skills point to until the student picks one
+  const [branchChoice, setBranchChoice] = useState<Branch | null>(initial.branch);
+  const branch = branchChoice ?? likelyBranch(skills);
   const [alerts, setAlerts] = useState<AlertValues>({ frequency: initial.frequency, channels: initial.channels, alertHour: initial.alertHour, quietStart: 22, quietEnd: 7 });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -42,7 +48,7 @@ export function Wizard({ initial, review = false, startAtUpload = false }: { ini
 
   useEffect(() => { heading.current?.focus(); }, [step]);
   // Roles ranked by the student's own skills and branch (lib/branches.ts)
-  const roleList = suggestRoles(skills);
+  const roleList = suggestRoles(skills, branch);
 
   async function next(action: () => Promise<{ ok: boolean; error?: string }>) {
     setBusy(true);
@@ -93,6 +99,7 @@ export function Wizard({ initial, review = false, startAtUpload = false }: { ini
               <Button variant="text" className="mt-2" onClick={() => router.replace("/dashboard")}>Looks right, go to dashboard</Button>
             )}
           </div>
+          <BranchSelect id="ob-branch" value={branch} onChange={setBranchChoice} />
           <TagInput label="Roles" values={roles} onChange={setRoles} placeholder={roleList[0]} suggestions={roleList} max={10} />
           <TagInput label="Cities" hint="Add Remote to include remote jobs." values={locations} onChange={setLocations} placeholder="Pune" suggestions={INDIA_CITIES} normalize={tidyCity} max={10} />
           <fieldset>
@@ -109,7 +116,7 @@ export function Wizard({ initial, review = false, startAtUpload = false }: { ini
           {error && <p className="text-small text-danger" role="alert">{error}</p>}
           <div className="flex gap-3">
             <Button variant="secondary" onClick={() => setStep(0)}>Back</Button>
-            <Button loading={busy} onClick={() => next(() => savePreferences({ preferred_roles: roles, locations, job_type: jobType }))}>Continue</Button>
+            <Button loading={busy} onClick={() => next(() => savePreferences({ preferred_roles: roles, locations, job_type: jobType, branch }))}>Continue</Button>
           </div>
         </section>
       )}

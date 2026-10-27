@@ -5,7 +5,7 @@ import { CompanyLogo } from "@/components/ui/CompanyLogo";
 import { Badge, SkillChip } from "@/components/ui/Highlighter";
 import { cleanCompany } from "@/lib/company";
 import { MatchScore, type MatchReasons } from "@/components/ui/MatchScore";
-import { city, timeAgo } from "@/lib/format";
+import { city, lastDate, timeAgo } from "@/lib/format";
 import { formatJobDescription } from "@/lib/jobtext";
 import { requireUser } from "@/lib/supabase/server";
 import { uuid } from "@/lib/validate";
@@ -22,7 +22,7 @@ export default async function ApplyPage({ params, searchParams }: { params: Prom
 
   const [{ data: u }, { data: job }, { data: match }, { data: profile }] = await Promise.all([
     supabase.from("users").select("plan").eq("id", user!.id).single(),
-    supabase.from("jobs").select("id, title, company, company_domain, location, remote, description, skills, fresher_friendly, apply_url, posted_at").eq("id", id).maybeSingle(),
+    supabase.from("jobs").select("id, title, company, company_domain, location, remote, description, skills, fresher_friendly, apply_url, posted_at, deadline").eq("id", id).maybeSingle(),
     supabase.from("matches").select("score, reasons").eq("user_id", user!.id).eq("job_id", id).maybeSingle(),
     supabase.from("profiles").select("skills").eq("user_id", user!.id).maybeSingle(),
   ]);
@@ -39,7 +39,7 @@ export default async function ApplyPage({ params, searchParams }: { params: Prom
             <CompanyLogo company={job.company} domain={job.company_domain} size="lg" />
             <div>
               <h1 className="text-h2 font-semibold md:text-h2-lg">{job.title}</h1>
-              <p className="text-body text-ink-2">{cleanCompany(job.company)} · {where}{job.posted_at ? ` · ${timeAgo(job.posted_at)}` : ""}</p>
+              <p className="text-body text-ink-2">{cleanCompany(job.company)} · {where}{job.deadline ? ` · ${lastDate(job.deadline)}` : job.posted_at ? ` · ${timeAgo(job.posted_at)}` : ""}</p>
             </div>
           </div>
           {match && <MatchScore score={match.score} reasons={match.reasons as MatchReasons} city={where} />}
