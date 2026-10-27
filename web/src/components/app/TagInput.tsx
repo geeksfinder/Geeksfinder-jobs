@@ -3,7 +3,12 @@
 import { X } from "lucide-react";
 import { useId, useState } from "react";
 
-/** Editable list of short values (skills, roles, cities). Enter or comma adds; Backspace on empty removes last. */
+/**
+ * Editable list of short values (skills, roles, cities). Enter or comma adds; Backspace on empty removes last.
+ * Long suggestion lists show 8 at a time, narrowed by what's typed. `normalize` tidies a value as it's added
+ * (cities: "banglore" → "Bengaluru").
+ */
+const SHOWN = 8;
 export function TagInput({
   label,
   hint,
@@ -13,6 +18,7 @@ export function TagInput({
   suggestions = [],
   max = 60,
   error,
+  normalize,
 }: {
   label: string;
   hint?: string;
@@ -22,14 +28,22 @@ export function TagInput({
   suggestions?: string[];
   max?: number;
   error?: string;
+  normalize?: (v: string) => string;
 }) {
   const id = useId();
   const [draft, setDraft] = useState("");
   const add = (raw: string) => {
-    const v = raw.trim().replace(/\s+/g, " ").slice(0, 60);
+    const typed = raw.trim().replace(/\s+/g, " ").slice(0, 60);
+    const v = typed && normalize ? normalize(typed) : typed;
     if (!v || values.some((x) => x.toLowerCase() === v.toLowerCase()) || values.length >= max) return;
     onChange([...values, v]);
   };
+
+  const q = draft.trim().toLowerCase();
+  const offered = suggestions
+    .filter((s) => !values.some((v) => v.toLowerCase() === s.toLowerCase()))
+    .filter((s) => !q || s.toLowerCase().includes(q))
+    .slice(0, SHOWN);
 
   return (
     <div>
@@ -63,9 +77,9 @@ export function TagInput({
         />
       </div>
       {error && <p id={`${id}-err`} className="mt-1.5 text-small text-danger">{error}</p>}
-      {suggestions.filter((s) => !values.includes(s)).length > 0 && (
+      {offered.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5">
-          {suggestions.filter((s) => !values.includes(s)).map((s) => (
+          {offered.map((s) => (
             <button key={s} type="button" onClick={() => add(s)} className="h-8 rounded-chip border border-dashed border-line px-2 text-small text-ink-2 hover:border-ink-3 hover:text-ink">
               + {s}
             </button>

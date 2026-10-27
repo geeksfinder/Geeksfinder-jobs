@@ -1,32 +1,9 @@
 import { unstable_cache } from "next/cache";
-import { city } from "./format";
+import { canonicalCity } from "./cities";
 import { publicClient } from "./public-data";
 
-/** One spelling per city, so "Bangalore" and "Bengaluru" filter the same jobs. */
-const CITY_ALIASES: Record<string, string> = {
-  bangalore: "Bengaluru",
-  bengaluru: "Bengaluru",
-  gurgaon: "Gurugram",
-  gurugram: "Gurugram",
-  bombay: "Mumbai",
-  "new delhi": "Delhi",
-  "delhi ncr": "Delhi",
-  madras: "Chennai",
-  calcutta: "Kolkata",
-  poona: "Pune",
-};
-
-export function canonicalCity(name: string | null | undefined) {
-  const c = city(name);
-  if (!c) return "";
-  return CITY_ALIASES[c.toLowerCase()] ?? c.replace(/\b\w/g, (ch) => ch.toUpperCase());
-}
-
-/** Every spelling we store for a canonical city (used to build the database filter). */
-export function citySpellings(canonical: string) {
-  const all = Object.entries(CITY_ALIASES).filter(([, v]) => v.toLowerCase() === canonical.toLowerCase()).map(([k]) => k);
-  return all.length ? all : [canonical.toLowerCase()];
-}
+// City spellings live in lib/cities.ts (shared with matching and scripts); re-exported for existing imports
+export { canonicalCity, citySpellings } from "./cities";
 
 // Roles freshers search for; shown even before matching jobs exist, merged with real titles
 const COMMON_ROLES = [

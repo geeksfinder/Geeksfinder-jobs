@@ -6,6 +6,7 @@ import { saveProfile } from "@/app/onboarding/actions";
 import { TagInput } from "@/components/app/TagInput";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
+import { INDIA_CITIES, tidyCity } from "@/lib/cities";
 import type { ProfileInput } from "@/lib/validate";
 
 export function ProfileEditor({ initial }: { initial: ProfileInput }) {
@@ -41,7 +42,7 @@ export function ProfileEditor({ initial }: { initial: ProfileInput }) {
 
       <TagInput label="Skills" values={p.skills} onChange={(v) => set("skills", v)} placeholder="Add a skill" />
       <TagInput label="Roles you want" values={p.preferred_roles} onChange={(v) => set("preferred_roles", v)} placeholder="Frontend Developer" max={10} />
-      <TagInput label="Cities" hint="Add Remote to include remote jobs." values={p.locations} onChange={(v) => set("locations", v)} placeholder="Pune" max={10} />
+      <TagInput label="Cities" hint="Add Remote to include remote jobs." values={p.locations} onChange={(v) => set("locations", v)} placeholder="Pune" suggestions={INDIA_CITIES} normalize={tidyCity} max={10} />
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div>

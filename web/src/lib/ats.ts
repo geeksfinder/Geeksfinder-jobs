@@ -1,15 +1,9 @@
 /** Plain-code ATS check (no AI): runs in the browser, so the resume never leaves the device. */
 
-export const SKILLS = [
-  "JavaScript", "TypeScript", "React", "Next.js", "Angular", "Vue", "Node.js", "Express", "HTML", "CSS", "Tailwind CSS", "Bootstrap", "Redux",
-  "Python", "Django", "Flask", "FastAPI", "Java", "Spring Boot", "Kotlin", "C", "C++", "C#", ".NET", "Go", "Rust", "PHP", "Laravel", "Ruby",
-  "SQL", "MySQL", "PostgreSQL", "MongoDB", "Redis", "Firebase", "Supabase", "Oracle", "GraphQL", "REST APIs", "Microservices",
-  "Git", "GitHub", "Docker", "Kubernetes", "AWS", "Azure", "GCP", "Linux", "CI/CD", "Jenkins", "Terraform",
-  "Machine Learning", "Deep Learning", "NLP", "TensorFlow", "PyTorch", "Pandas", "NumPy", "scikit-learn", "Power BI", "Tableau", "Excel",
-  "Data Structures", "Algorithms", "OOP", "DBMS", "Operating Systems", "Computer Networks", "System Design",
-  "Android", "Flutter", "React Native", "Swift", "Figma", "Selenium", "Jest", "Testing", "Agile", "Jira",
-  "Communication", "Problem Solving", "Teamwork",
-];
+import { SKILL_LIST, skillSpellings } from "./skills";
+
+// Every branch's skills from the shared dictionary (lib/skills.ts), not a software-only list
+export const SKILLS = SKILL_LIST.map((s) => s.name);
 
 const norm = (s: string) => s.toLowerCase();
 const has = (text: string, skill: string) => {
@@ -27,9 +21,11 @@ export type AtsResult = {
 export function checkAts(resume: string, job: string): AtsResult {
   const r = norm(resume);
   const j = norm(job);
-  const asked = SKILLS.filter((s) => has(j, s));
-  const matched = asked.filter((s) => has(r, s));
-  const missing = asked.filter((s) => !has(r, s));
+  // A skill counts when any of its safe spellings appears ("ReactJS" on the resume covers "React" in the job)
+  const found = (text: string, skill: string) => skillSpellings(skill, { inText: true }).some((sp) => has(text, sp));
+  const asked = SKILLS.filter((s) => found(j, s));
+  const matched = asked.filter((s) => found(r, s));
+  const missing = asked.filter((s) => !found(r, s));
   const words = resume.split(/\s+/).filter(Boolean).length;
 
   const checks = [

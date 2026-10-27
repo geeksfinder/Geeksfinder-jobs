@@ -10,6 +10,7 @@ import { Button, ButtonLink } from "@/components/ui/Button";
 import { SkillChip } from "@/components/ui/Highlighter";
 import { JobCard } from "@/components/ui/JobCard";
 import { EmptyState, useToast } from "@/components/ui/Toast";
+import { INDIA_CITIES, tidyCity } from "@/lib/cities";
 import { firstMatches, saveAlerts, savePreferences, saveSkills, type FirstMatch } from "./actions";
 
 type Initial = {
@@ -26,7 +27,6 @@ type Initial = {
 
 const STEPS = ["Upload resume", "Preferences", "Alerts", "Done"];
 const ROLE_SUGGESTIONS = ["Frontend Developer", "Software Engineer", "Data Analyst", "Full Stack Developer", "Python Developer"];
-const CITY_SUGGESTIONS = ["Remote", "Bengaluru", "Pune", "Hyderabad", "Mumbai"];
 
 export function Wizard({ initial, review = false, startAtUpload = false }: { initial: Initial; review?: boolean; startAtUpload?: boolean }) {
   const router = useRouter();
@@ -92,7 +92,7 @@ export function Wizard({ initial, review = false, startAtUpload = false }: { ini
             )}
           </div>
           <TagInput label="Roles" values={roles} onChange={setRoles} placeholder="Frontend Developer" suggestions={ROLE_SUGGESTIONS} max={10} />
-          <TagInput label="Cities" hint="Add Remote to include remote jobs." values={locations} onChange={setLocations} placeholder="Pune" suggestions={CITY_SUGGESTIONS} max={10} />
+          <TagInput label="Cities" hint="Add Remote to include remote jobs." values={locations} onChange={setLocations} placeholder="Pune" suggestions={INDIA_CITIES} normalize={tidyCity} max={10} />
           <fieldset>
             <legend className="label">Job type</legend>
             <div className="flex rounded-control border border-line p-1">
