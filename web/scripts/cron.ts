@@ -4,19 +4,24 @@
  *   npx tsx scripts/cron.ts notify   # hourly at :30 IST: digests for users whose alert time is now, follow-ups, downgrades
  */
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import tls from "node:tls";
 import { withCronRun, type CronContext } from "@/lib/admin/cron-run";
 import { getFlag } from "@/lib/admin/flags";
 import { fetchSearches } from "@/lib/branches";
 import { inIndia } from "@/lib/cities";
 import { syncJobCompanies } from "@/lib/company-sync";
-import { plainText } from "@/lib/html-text";
+import { decodeEntities, plainText } from "@/lib/html-text";
 import { bestApplyLink, isMiddleman, type ApplyOption } from "@/lib/job-quality";
 import { allRows } from "@/lib/supabase/all-rows";
 import { resolvePlan, tier, type Grant } from "@/lib/entitlement";
-import { generateJSON, untrusted } from "@/lib/ai";
+import { generateJSON, govtListPrompt, govtNoticePrompt, untrusted } from "@/lib/ai";
 import { sendEmail } from "@/lib/email";
+import { advertLink, govtDescription, isoDate, onDomain, pageLinks, todayIst, type GovtNotice, type GovtSource } from "@/lib/govt";
 import { htmlToText, minYearsAsked } from "@/lib/jobtext";
+import { safeFetch } from "@/lib/safe-fetch";
+import { isPdf } from "@/lib/security";
+import { extractText, getDocumentProxy } from "unpdf";
 import { eligible } from "@/lib/match-now";
 import { MATCH_THRESHOLD, NEAR_THRESHOLD, scoreMatch } from "@/lib/matching";
 import { likelyBranch } from "@/lib/skills";
@@ -43,6 +48,20 @@ async function fetchRetry(input: RequestInfo | URL, init?: RequestInit, tries = 
 }
 
 const db = adminClient({ fetch: (input, init) => fetchRetry(input, init) });
+
+/**
+ * Some official sites send an incomplete certificate chain (BEL leaves out its Sectigo intermediate), which browsers
+ * repair and Node refuses. Trust the public intermediates in scripts/certs on top of Node's normal list; nothing is
+ * switched off. Needs Node 22.19+ / 24 (the daily workflow runs 24); older Node just skips those sites.
+ */
+const tlsWithCas = tls as typeof tls & { setDefaultCACertificates?: (certs: string[]) => void; getCACertificates?: (type: "default") => string[] };
+if (tlsWithCas.setDefaultCACertificates && tlsWithCas.getCACertificates) {
+  const dir = new URL("./certs/", import.meta.url);
+  const extra = readdirSync(dir)
+    .filter((f) => f.endsWith(".pem"))
+    .flatMap((f) => readFileSync(new URL(f, dir), "utf8").match(/-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----/g) ?? []);
+  if (extra.length) tlsWithCas.setDefaultCACertificates([...tlsWithCas.getCACertificates("default"), ...extra]);
+}
 const APP = process.env.NEXT_PUBLIC_APP_URL ?? "";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const log = (...a: unknown[]) => console.log(new Date().toISOString(), ...a);
@@ -317,6 +336,146 @@ async function fetchRemotive(): Promise<RawJob[]> {
   } catch (e) { log("remotive error", e); return []; }
 }
 
+// ---------- Govt & PSU (official careers pages only; lib/govt.ts) ----------
+
+type NoticeContent = { text: string; pdf?: Uint8Array };
+
+/**
+ * One official notice: a PDF (its text, or the file itself when it's a scanned image), a viewer page that frames
+ * the PDF on the same site (NTPC), or an HTML notice page plus the advertisement PDF it links to (Coal India).
+ */
+async function readNotice(url: string, domain: string, depth = 0): Promise<NoticeContent> {
+  const res = await safeFetch(url, { timeoutMs: 45_000, maxBytes: 8_000_000 });
+  if (res.status >= 400 || res.truncated) return { text: "" };
+  if (isPdf(res.bytes)) {
+    const pdf = await getDocumentProxy(res.bytes.slice());
+    if (pdf.numPages > 40) return { text: "" };
+    const text = (await extractText(pdf, { mergePages: true })).text;
+    // A scanned advert has no text layer: the AI reads the PDF itself
+    return text.trim().length >= 200 ? { text } : { text, pdf: res.bytes };
+  }
+  if (depth > 0) return { text: htmlToText(res.text) };
+  const frame = /<iframe[^>]+src=["']([^"']+)["']/i.exec(res.text)?.[1];
+  if (frame) {
+    const next = new URL(decodeEntities(frame), res.url).toString();
+    if (onDomain(next, domain)) return readNotice(next, domain, 1);
+  }
+  const page = htmlToText(res.text);
+  const advert = advertLink(pageLinks(res.text, res.url));
+  if (!advert) return { text: page };
+  const pdf = await readNotice(advert.url, domain, 1).catch(() => ({ text: "" }) as NoticeContent);
+  return { text: `${pdf.text}\n\n${page}`.trim(), pdf: pdf.pdf };
+}
+
+/**
+ * Current Govt & PSU openings from each organisation's own careers page: AI picks the open notices among the page's
+ * links (only links really on the page, on its own domain, are kept), each new notice is read once and saved as a
+ * job with its last date, and jobs past their last date are hidden. `govt --dry-run` reads and prints, writing nothing.
+ */
+async function govtJobs(ctx: CronContext) {
+  const dry = process.argv.includes("--dry-run");
+  const ready = await db.from("govt_notices").select("url").limit(1);
+  if (ready.error && !dry) {
+    ctx.warn("Govt & PSU jobs skipped: run supabase/migrations/017_govt_jobs_and_branch.sql in the Supabase SQL editor");
+    return { govt_new: 0, govt_read: 0, govt_expired: 0 };
+  }
+  const { sources } = JSON.parse(readFileSync(new URL("./govt-sources.json", import.meta.url), "utf8")) as { sources: GovtSource[] };
+  const today = todayIst();
+  const perSource = Number(process.env.GOVT_NOTICES_PER_SOURCE ?? 5);
+  const pause = () => sleep(Number(process.env.AI_DELAY_MS ?? 4000));
+  let added = 0;
+  let read = 0;
+  for (const src of sources) {
+    try {
+      const page = await safeFetch(src.url, { timeoutMs: 30_000, maxBytes: 4_000_000 });
+      const links = page.status < 400 ? pageLinks(page.text, page.url).filter((l) => onDomain(l.url, src.domain)) : [];
+      if (!links.length) {
+        ctx.warn(`Govt ${src.id}: no links on ${src.url} (status ${page.status}); the page may have changed`);
+        continue;
+      }
+      const lines = links.map((l, i) => `${i + 1}. ${l.text || "(no text)"} | ${l.context} | ${l.url}`).join("\n");
+      const pick = await generateJSON<{ lines?: unknown[] }>(govtListPrompt(src.name, today, lines));
+      await pause();
+      const numbers = [...new Set((pick.lines ?? []).filter((n): n is number => Number.isInteger(n)))];
+      const picked = numbers.map((n) => links[n - 1]).filter(Boolean).slice(0, 10);
+      const known = new Set<string>();
+      if (!ready.error && picked.length) {
+        const { data } = await db.from("govt_notices").select("url").in("url", picked.map((l) => l.url));
+        data?.forEach((r) => known.add(r.url));
+      }
+      const fresh = picked.filter((l) => !known.has(l.url)).slice(0, perSource);
+      log(`govt ${src.id}: ${links.length} links, ${picked.length} openings, ${fresh.length} new`);
+
+      for (const l of fresh) {
+        // The link's own text, or the heading before a "Click here to view the advertisement" link
+        const generic = l.text.length < 12 || /^(click here|view|download|read more|details|apply|pdf)\b/i.test(l.text);
+        const title0 = (generic ? l.context.split(" · ").pop() || l.text : l.text).slice(0, 200);
+        const remember = async (status: "job" | "not_a_job" | "closed" | "unreadable", jobId: string | null = null) => {
+          if (!dry) await db.from("govt_notices").upsert({ url: l.url, source: src.id, title: title0, status, job_id: jobId, checked_at: new Date().toISOString() });
+        };
+        const content = await readNotice(l.url, src.domain).catch((e) => (log(`  read failed: ${(e as Error).message}`), { text: "" }) as NoticeContent);
+        read++;
+        if (content.text.trim().length < 200 && !content.pdf) {
+          log(`  unreadable: ${title0}`);
+          await remember("unreadable");
+          continue;
+        }
+        const n = content.pdf && content.text.trim().length < 200
+          ? await generateJSON<GovtNotice>(govtNoticePrompt(src.name, title0, today, "", true), { mimeType: "application/pdf", data: content.pdf })
+          : await generateJSON<GovtNotice>(govtNoticePrompt(src.name, title0, today, content.text));
+        await pause();
+        const last = isoDate(n.last_date);
+        if (!n.is_opening || !n.fresher_ok) {
+          log(`  ${n.is_opening ? "needs experience" : "not an opening"}: ${title0}`);
+          await remember("not_a_job");
+          continue;
+        }
+        // No readable last date, no listing: a closed opening must never look open
+        if (!last || last < today) {
+          log(`  closed or no last date (${String(n.last_date)}): ${title0}`);
+          await remember(last ? "closed" : "unreadable");
+          continue;
+        }
+        const notice: GovtNotice = { ...n, posts: (Array.isArray(n.posts) ? n.posts : []).map((p) => ({ ...p, branches: Array.isArray(p.branches) ? p.branches : [] })) };
+        const row = {
+          source: `govt:${src.id}`,
+          source_id: createHash("sha256").update(l.url).digest("hex").slice(0, 40),
+          title: String(n.title || title0).slice(0, 200),
+          company: src.name,
+          company_domain: src.company_domain,
+          location: String(n.location || "India").slice(0, 120),
+          remote: false,
+          description: govtDescription(notice, src, l.url, last).slice(0, 12000),
+          apply_url: l.url,
+          posted_at: new Date().toISOString(),
+        };
+        if (dry) {
+          log(`  would add: ${row.title} · last date ${last} · ${row.location}`);
+          continue;
+        }
+        const { data: job, error } = await db.from("jobs").insert({ ...row, deadline: last, hash: hashJob(row as RawJob) }).select("id").single();
+        if (error && !/duplicate/i.test(error.message)) {
+          ctx.warn(`Govt ${src.id}: could not save "${row.title}": ${error.message}`);
+          continue;
+        }
+        await remember("job", job?.id ?? null);
+        if (job) added++;
+        log(`  added: ${row.title} · last date ${last}`);
+      }
+    } catch (e) {
+      ctx.warn(`Govt ${src.id} failed: ${(e as Error).message}`);
+    }
+  }
+  // Past the last date: hidden from every list, page and alert
+  let expired = 0;
+  if (!ready.error && !dry) {
+    const { data } = await db.from("jobs").update({ hidden_at: new Date().toISOString(), hidden_reason: "expired" }).lt("deadline", today).is("hidden_at", null).select("id");
+    expired = data?.length ?? 0;
+  }
+  log(`govt: ${added} new openings from ${read} notices read, ${expired} past their last date hidden`);
+  return { govt_new: added, govt_read: read, govt_expired: expired };
+}
+
 // ---------- Pipeline ----------
 
 async function ingest(ctx: CronContext) {
@@ -360,13 +519,15 @@ async function ingest(ctx: CronContext) {
   const companies = await syncJobCompanies(db).catch((e) => (ctx.warn(`company sync failed: ${(e as Error).message}`), { companies_changed: 0, job_domains_filled: 0 }));
   log("companies", companies);
 
+  // Govt & PSU openings join before the AI reading and matching, so they're matched in this same run
+  const govt = await govtJobs(ctx);
   const middlemen = await dropMiddlemen();
   const { enriched } = await enrich();
   const { matched } = await match();
   const { data: cleaned, error } = await db.rpc("cleanup_old_data");
   log("cleanup", error ? `failed: ${error.message}` : JSON.stringify(cleaned));
   if (error) ctx.warn(`cleanup failed: ${error.message}`);
-  return { fetched: fetched.length, kept: all.length, new: fresh.length, inserted, enriched, matched, middlemen_removed: middlemen, ...companies };
+  return { fetched: fetched.length, kept: all.length, new: fresh.length, inserted, enriched, matched, middlemen_removed: middlemen, ...govt, ...companies };
 }
 
 /**
@@ -595,7 +756,7 @@ async function prune() {
   return { pruned: remove.length, kept_in_use: used.size };
 }
 
-const COMMANDS: Record<string, (ctx: CronContext) => Promise<Record<string, number> | void>> = { ingest, notify, enrich, match, backfill, prune, middlemen: async () => ({ removed: await dropMiddlemen() }) };
+const COMMANDS: Record<string, (ctx: CronContext) => Promise<Record<string, number> | void>> = { ingest, notify, enrich, match, backfill, prune, middlemen: async () => ({ removed: await dropMiddlemen() }), govt: govtJobs };
 const cmd = process.argv[2];
 const run = COMMANDS[cmd];
 if (!run) {

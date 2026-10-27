@@ -1,0 +1,10 @@
+{
+  "_comment": "Official careers pages read by the 6:00 run (lib/govt.ts). Only the organisation's own domain counts: links elsewhere are ignored. Checked 2026-10-28; these could not be read by a server then: BHEL, GAIL, IOCL, HAL (pages built in the browser, or moved), DRDO, NATS apprenticeship portal (no answer).",
+  "sources": [
+    { "id": "bel", "name": "Bharat Electronics (BEL)", "url": "https://bel-india.in/job-notifications/", "domain": "bel-india.in", "company_domain": "bel-india.in" },
+    { "id": "ntpc", "name": "NTPC", "url": "https://careers.ntpc.co.in/recruitment/", "domain": "ntpc.co.in", "company_domain": "ntpc.co.in" },
+    { "id": "ongc", "name": "ONGC", "url": "https://ongcindia.com/web/eng/career/recruitment-notice", "domain": "ongcindia.com", "company_domain": "ongcindia.com" },
+    { "id": "powergrid", "name": "POWERGRID", "url": "https://www.powergrid.in/job-opportunities", "domain": "powergrid.in", "company_domain": "powergrid.in" },
+    { "id": "coalindia", "name": "Coal India", "url": "https://www.coalindia.in/career-cil/jobs-coal-india/", "domain": "coalindia.in", "company_domain": "coalindia.in" }
+  ]
+}

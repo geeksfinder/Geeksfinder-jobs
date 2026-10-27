@@ -49,6 +49,8 @@ export const ROLES = [
     terms: ["electronics", "embedded", "vlsi", "firmware", "pcb", "fpga", "hardware engineer", "rf engineer", "design verification"],
   },
   { slug: "chemical-engineer", name: "Chemical Engineering", phrase: "Chemical engineering fresher jobs", terms: ["chemical", "chemist"] },
+  // Chosen by where the job came from (official PSU careers pages, scripts/cron.ts govtJobs), not by title words
+  { slug: "govt-psu", name: "Govt and PSU", phrase: "Govt and PSU jobs for freshers", terms: [], source: "govt:" },
   {
     slug: "sales-marketing",
     name: "Sales and Marketing",
@@ -116,11 +118,15 @@ export function hubName(hub: Pick<Hub, "role" | "city">) {
 
 const esc = (s: string) => s.replace(/[%_,()]/g, " ").trim();
 
+const roleSource = (role: Role | null) => (role && "source" in role ? role.source : null);
+
 export async function hubJobs(hub: Hub, limit = 60): Promise<JobCardJob[]> {
   const db = publicClient();
   if (!db) return [];
   let q = db.from("jobs").select(JOB_COLS).eq("fresher_friendly", true).gte("created_at", FRESH()).order("posted_at", { ascending: false }).limit(limit);
-  if (hub.role) q = q.or(hub.role.terms.map((t) => `title.ilike.%${esc(t)}%`).join(","));
+  const source = roleSource(hub.role);
+  if (source) q = q.like("source", `${source}%`);
+  else if (hub.role) q = q.or(hub.role.terms.map((t) => `title.ilike.%${esc(t)}%`).join(","));
   if (hub.city) q = hub.city.slug === "remote" ? q.eq("remote", true) : q.or(hub.city.terms.map((t) => `location.ilike.%${esc(t)}%`).join(","));
   const { data } = await q;
   return (data ?? []) as JobCardJob[];
@@ -144,14 +150,15 @@ export function hubStats(jobs: JobCardJob[]) {
 }
 
 /** Pure count of live jobs per hub slug, from title, location and remote flag. */
-export function countHubs(jobs: { title: string; location: string | null; remote: boolean | null }[]): Map<string, number> {
+export function countHubs(jobs: { title: string; location: string | null; remote: boolean | null; source?: string | null }[]): Map<string, number> {
   const counts = new Map<string, number>();
   const hubs = allHubs();
   for (const j of jobs) {
     const title = ` ${j.title.toLowerCase()} `;
     const loc = (j.location ?? "").toLowerCase();
     for (const h of hubs) {
-      const roleHit = !h.role || h.role.terms.some((t) => title.includes(t));
+      const source = roleSource(h.role);
+      const roleHit = !h.role || (source ? (j.source ?? "").startsWith(source) : h.role.terms.some((t) => title.includes(t)));
       const cityHit = !h.city || (h.city.slug === "remote" ? !!j.remote : h.city.terms.some((t) => loc.includes(t)));
       if (roleHit && cityHit) counts.set(h.slug, (counts.get(h.slug) ?? 0) + 1);
     }
@@ -165,12 +172,12 @@ export const hubCounts = unstable_cache(
     const db = publicClient();
     if (!db) return [];
     const since = FRESH();
-    const data = await allRows<{ title: string; location: string | null; remote: boolean | null }>((a, b) =>
-      db.from("jobs").select("title, location, remote").eq("fresher_friendly", true).gte("created_at", since).order("id").range(a, b),
+    const data = await allRows<{ title: string; location: string | null; remote: boolean | null; source: string }>((a, b) =>
+      db.from("jobs").select("title, location, remote, source").eq("fresher_friendly", true).gte("created_at", since).order("id").range(a, b),
     );
     return [...countHubs(data)];
   },
-  ["hub-counts-v2"],
+  ["hub-counts-v3"],
   { revalidate: 3600 },
 );
 

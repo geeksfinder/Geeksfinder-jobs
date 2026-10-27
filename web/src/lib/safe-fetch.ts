@@ -39,7 +39,7 @@ export async function assertPublicUrl(raw: string): Promise<URL> {
 export async function safeFetch(
   raw: string,
   { timeoutMs = 6000, maxBytes = 1_000_000, maxRedirects = 3, headers = {} as Record<string, string> } = {},
-): Promise<{ status: number; url: string; text: string; contentType: string }> {
+): Promise<{ status: number; url: string; text: string; bytes: Uint8Array; truncated: boolean; contentType: string }> {
   let current = raw;
   for (let hop = 0; hop <= maxRedirects; hop++) {
     const url = await assertPublicUrl(current);
@@ -55,17 +55,20 @@ export async function safeFetch(
     const reader = res.body?.getReader();
     const chunks: Uint8Array[] = [];
     let size = 0;
+    let truncated = false;
     if (reader) {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         size += value.length;
-        if (size > maxBytes) { await reader.cancel(); break; }
+        if (size > maxBytes) { truncated = true; await reader.cancel(); break; }
         chunks.push(value);
       }
     }
-    const text = new TextDecoder().decode(Buffer.concat(chunks));
-    return { status: res.status, url: url.toString(), text, contentType: res.headers.get("content-type") ?? "" };
+    // Bytes for files (PDF notices); text for pages
+    const bytes = new Uint8Array(Buffer.concat(chunks));
+    const text = new TextDecoder().decode(bytes);
+    return { status: res.status, url: url.toString(), text, bytes, truncated, contentType: res.headers.get("content-type") ?? "" };
   }
   throw new Error("blocked: too many redirects");
 }

@@ -23,6 +23,8 @@
 # misc
 .DS_Store
 *.pem
+# Public CA certificates only (scripts/certs, used for official sites with broken chains). CI blocks private keys.
+!scripts/certs/*.pem
 
 # debug
 npm-debug.log*
