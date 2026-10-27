@@ -36,6 +36,13 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   reactStrictMode: true,
   serverExternalPackages: ["@react-pdf/renderer"],
+  // pdfkit loads its built-in fonts (Times, Helvetica) lazily through "#standard-fonts/*", which Vercel's file tracer
+  // misses: without this the PDF routes fail on Vercel only ("Couldn't create the PDF"). Check after upgrades with
+  // the route's .nft.json after `next build`.
+  outputFileTracingIncludes: {
+    "/api/tailor/[id]/pdf": ["./node_modules/pdfkit/js/standard-fonts/**/*"],
+    "/api/cover-letter/[id]/pdf": ["./node_modules/pdfkit/js/standard-fonts/**/*"],
+  },
   async headers() {
     return [
       { source: "/:path*", headers: securityHeaders },
