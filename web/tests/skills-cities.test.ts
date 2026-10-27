@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { offeredSuggestions } from "@/components/app/TagInput";
 import { checkAts } from "@/lib/ats";
-import { ANYWHERE, REMOTE, canonicalCity, placeFit, tidyCity } from "@/lib/cities";
+import { ANYWHERE, INDIA_CITIES, REMOTE, canonicalCity, placeFit, tidyCity } from "@/lib/cities";
 import { scoreMatch } from "@/lib/matching";
 import { canonicalSkill, likelyBranch, skillBranch, skillSpellings } from "@/lib/skills";
 
@@ -67,5 +68,23 @@ describe("matching and ATS for every branch", () => {
   });
   it("doesn't read the word 'rest' as REST APIs", () => {
     expect(checkAts("I worked with the rest of the team", "Must know REST APIs").matched).not.toContain("REST APIs");
+  });
+});
+
+describe("city picker", () => {
+  it("shows 8 cities at first and leaves out ones already picked", () => {
+    const shown = offeredSuggestions(INDIA_CITIES, ["Remote"], "", tidyCity);
+    expect(shown).toHaveLength(8);
+    expect(shown).not.toContain("Remote");
+  });
+  it("narrows as the student types, under either spelling", () => {
+    expect(offeredSuggestions(INDIA_CITIES, [], "nag", tidyCity)).toEqual(["Nagpur"]);
+    expect(offeredSuggestions(INDIA_CITIES, [], "banglore", tidyCity)).toEqual(["Bengaluru"]);
+    expect(offeredSuggestions(INDIA_CITIES, [], "Bangalore", tidyCity)).toEqual(["Bengaluru"]);
+    expect(offeredSuggestions(INDIA_CITIES, [], "delhi", tidyCity)).toContain("Delhi NCR");
+    expect(offeredSuggestions(INDIA_CITIES, [], "zzz", tidyCity)).toEqual([]);
+  });
+  it("still works without a normalize function (roles, skills)", () => {
+    expect(offeredSuggestions(["Data Analyst", "Software Engineer"], [], "data")).toEqual(["Data Analyst"]);
   });
 });

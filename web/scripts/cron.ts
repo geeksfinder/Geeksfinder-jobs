@@ -417,7 +417,8 @@ ${untrusted("jobs", batch.map((j) => `### id=${j.id}\n${j.title} at ${j.company}
 }
 
 async function match() {
-  const since = new Date(Date.now() - 3 * 86_400_000).toISOString();
+  // Jobs from the last 3 days; MATCH_DAYS=14 re-scores older ones once after a matching change
+  const since = new Date(Date.now() - Number(process.env.MATCH_DAYS ?? 3) * 86_400_000).toISOString();
   const { data: jobs } = await db.from("jobs").select("id, title, location, remote, skills, fresher_friendly, posted_at, experience_min").eq("enriched", true).gte("created_at", since);
   const { data: profiles } = await db.from("profiles").select("user_id, skills, preferred_roles, locations, job_type, experience_level");
   let saved = 0;

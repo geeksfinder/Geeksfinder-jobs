@@ -9,6 +9,17 @@ import { useId, useState } from "react";
  * (cities: "banglore" → "Bengaluru").
  */
 const SHOWN = 8;
+
+/** Suggestions not already added that fit what's typed, under either spelling ("banglore" offers Bengaluru). */
+export function offeredSuggestions(suggestions: string[], values: string[], draft: string, normalize?: (v: string) => string) {
+  const q = draft.trim().toLowerCase();
+  const tidy = q && normalize ? normalize(draft.trim()).toLowerCase() : "";
+  return suggestions
+    .filter((s) => !values.some((v) => v.toLowerCase() === s.toLowerCase()))
+    .filter((s) => !q || s.toLowerCase().includes(q) || (tidy && s.toLowerCase().includes(tidy)))
+    .slice(0, SHOWN);
+}
+
 export function TagInput({
   label,
   hint,
@@ -39,11 +50,7 @@ export function TagInput({
     onChange([...values, v]);
   };
 
-  const q = draft.trim().toLowerCase();
-  const offered = suggestions
-    .filter((s) => !values.some((v) => v.toLowerCase() === s.toLowerCase()))
-    .filter((s) => !q || s.toLowerCase().includes(q))
-    .slice(0, SHOWN);
+  const offered = offeredSuggestions(suggestions, values, draft, normalize);
 
   return (
     <div>
