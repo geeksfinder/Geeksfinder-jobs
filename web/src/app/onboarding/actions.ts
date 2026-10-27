@@ -10,7 +10,7 @@ import { LIMITS } from "@/lib/plan";
 import { rateLimit } from "@/lib/ratelimit";
 import { adminClient, requireUser } from "@/lib/supabase/server";
 import { botLink } from "@/lib/telegram";
-import { AlertsBody, ProfileBody, type ProfileInput } from "@/lib/validate";
+import { AlertsBody, ProfileBody, profileIssueText, type ProfileInput } from "@/lib/validate";
 
 type Result = { ok: true } | { ok: false; error: string };
 
@@ -45,7 +45,7 @@ export async function savePreferences(input: z.infer<typeof PrefsBody>): Promise
 export async function saveProfile(input: ProfileInput): Promise<Result> {
   const { supabase, user } = await authed();
   const parsed = ProfileBody.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
+  if (!parsed.success) return { ok: false, error: profileIssueText(parsed.error.issues[0]) };
   const { name, phone, ...profile } = parsed.data;
   await supabase.from("users").update({ name, phone }).eq("id", user.id);
   const { error } = await supabase.from("profiles").upsert({ user_id: user.id, ...profile, updated_at: new Date().toISOString() });

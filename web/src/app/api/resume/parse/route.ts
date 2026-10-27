@@ -4,6 +4,7 @@ import { AiBudgetError, generateJSON, resumeParsePrompt, type ParsedResume } fro
 import { rateLimit } from "@/lib/ratelimit";
 import { badRequest, fail, isPdf, tooMany, unauthorized } from "@/lib/security";
 import { requireUser } from "@/lib/supabase/server";
+import { fitParsedProfile } from "@/lib/validate";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -54,9 +55,8 @@ export async function POST(request: Request) {
   await supabase.from("profiles").upsert({
     user_id: user.id,
     skills,
-    education: (parsed.education ?? []).slice(0, 6),
-    projects: (parsed.projects ?? []).slice(0, 10),
-    experience: (parsed.experience ?? []).slice(0, 8),
+    // Trimmed to what the profile form accepts, so the student can always save it later
+    ...fitParsedProfile(parsed),
     experience_level: ["fresher", "0-1", "1-3"].includes(parsed.experience_level) ? parsed.experience_level : "fresher",
     raw_resume_url: path,
     updated_at: new Date().toISOString(),

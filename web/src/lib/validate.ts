@@ -19,6 +19,17 @@ export const OutreachSentBody = z.object({
   contactEmail: z.string().email().max(254).optional().nullable(),
 });
 
+/**
+ * Longest text each profile field takes. One list for the schema below, the resume reader (which trims what it
+ * reads from a PDF to fit, so a parsed profile always saves) and the form's maxLength.
+ */
+export const PROFILE_MAX = {
+  education: { institution: 150, degree: 150, year: 40, score: 40 },
+  projects: { name: 120, description: 1200 },
+  experience: { company: 120, role: 120, duration: 60, bullet: 400 },
+} as const;
+const M = PROFILE_MAX;
+
 export const ProfileBody = z.object({
   name: text(100),
   phone: z.string().trim().max(20).regex(/^[+\d\s-]*$/, "Use digits only"),
@@ -27,13 +38,54 @@ export const ProfileBody = z.object({
   locations: list(10, 60),
   job_type: z.enum(["full-time", "internship", "both"]),
   experience_level: z.enum(["fresher", "0-1", "1-3"]),
-  education: z.array(z.object({ institution: text(150), degree: text(150), year: text(20), score: text(20).optional() })).max(6),
-  projects: z.array(z.object({ name: text(120), description: text(1200), tech: list(15).default([]) })).max(10),
+  education: z
+    .array(z.object({ institution: text(M.education.institution), degree: text(M.education.degree), year: text(M.education.year), score: text(M.education.score).optional() }))
+    .max(6),
+  projects: z.array(z.object({ name: text(M.projects.name), description: text(M.projects.description), tech: list(15).default([]) })).max(10),
   experience: z
-    .array(z.object({ company: text(120), role: text(120), duration: text(60), bullets: z.array(text(400)).max(8) }))
+    .array(z.object({ company: text(M.experience.company), role: text(M.experience.role), duration: text(M.experience.duration), bullets: z.array(text(M.experience.bullet)).max(8) }))
     .max(8),
 });
 export type ProfileInput = z.infer<typeof ProfileBody>;
+
+const clip = (v: unknown, max: number) => String(v ?? "").trim().slice(0, max);
+/** What the resume reader found, trimmed to PROFILE_MAX so the profile form can always save it. */
+export function fitParsedProfile(p: { education?: unknown[]; projects?: unknown[]; experience?: unknown[] }) {
+  const rows = (xs: unknown[] | undefined, n: number) => (Array.isArray(xs) ? xs : []).slice(0, n).map((x) => (x ?? {}) as Record<string, unknown>);
+  return {
+    education: rows(p.education, 6).map((e) => ({
+      institution: clip(e.institution, M.education.institution),
+      degree: clip(e.degree, M.education.degree),
+      year: clip(e.year, M.education.year),
+      score: clip(e.score, M.education.score),
+    })),
+    projects: rows(p.projects, 10).map((x) => ({
+      name: clip(x.name, M.projects.name),
+      description: clip(x.description, M.projects.description),
+      tech: (Array.isArray(x.tech) ? x.tech : []).slice(0, 15).map((t) => clip(t, 60)).filter(Boolean),
+    })),
+    experience: rows(p.experience, 8).map((x) => ({
+      company: clip(x.company, M.experience.company),
+      role: clip(x.role, M.experience.role),
+      duration: clip(x.duration, M.experience.duration),
+      bullets: (Array.isArray(x.bullets) ? x.bullets : []).slice(0, 8).map((b) => clip(b, M.experience.bullet)).filter(Boolean),
+    })),
+  };
+}
+
+const SECTION: Record<string, string> = { name: "Name", phone: "Phone", skills: "Skills", preferred_roles: "Roles", locations: "Cities", education: "Education", projects: "Project", experience: "Experience" };
+const FIELD: Record<string, string> = { institution: "college", degree: "degree", year: "year", score: "score", name: "name", description: "description", tech: "tools", company: "company", role: "role", duration: "dates", bullets: "point" };
+
+/** A profile form error in plain words: "Education 1 year is too long. Keep it under 40 characters." */
+export function profileIssueText(issue: z.core.$ZodIssue) {
+  const [section, index, field] = issue.path.map(String);
+  const where = [SECTION[section] ?? "A field", index !== undefined && /^\d+$/.test(index) && field ? String(Number(index) + 1) : "", field ? FIELD[field] ?? field : ""]
+    .filter(Boolean)
+    .join(" ");
+  if (issue.code === "too_big" && "maximum" in issue) return issue.origin === "array" ? `${where}: too many. Keep it to ${issue.maximum}.` : `${where} is too long. Keep it under ${issue.maximum} characters.`;
+  if (issue.code === "too_small") return `${where} is empty. Fill it in or remove it.`;
+  return section === "phone" ? issue.message : `${where} isn't valid. Check it and save again.`;
+}
 
 export const AlertsBody = z.object({
   frequency: z.enum(["daily", "weekly", "monthly"]),

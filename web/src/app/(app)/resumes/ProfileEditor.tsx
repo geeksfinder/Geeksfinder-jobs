@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { suggestRoles } from "@/lib/branches";
 import { INDIA_CITIES, tidyCity } from "@/lib/cities";
-import type { ProfileInput } from "@/lib/validate";
+import { PROFILE_MAX, type ProfileInput } from "@/lib/validate";
 
 export function ProfileEditor({ initial }: { initial: ProfileInput }) {
   const [p, setP] = useState<ProfileInput>(initial);
@@ -71,7 +71,7 @@ export function ProfileEditor({ initial }: { initial: ProfileInput }) {
             {(["institution", "degree", "year", "score"] as const).map((k) => (
               <div key={k}>
                 <label className="sr-only" htmlFor={`ed-${i}-${k}`}>{k}</label>
-                <input id={`ed-${i}-${k}`} className="input" placeholder={k === "score" ? "CGPA / %" : k[0].toUpperCase() + k.slice(1)} value={ed[k] ?? ""} onChange={(e) => set("education", p.education.map((x, j) => (j === i ? { ...x, [k]: e.target.value } : x)))} />
+                <input id={`ed-${i}-${k}`} maxLength={PROFILE_MAX.education[k]} className="input" placeholder={k === "score" ? "CGPA / %" : k[0].toUpperCase() + k.slice(1)} value={ed[k] ?? ""} onChange={(e) => set("education", p.education.map((x, j) => (j === i ? { ...x, [k]: e.target.value } : x)))} />
               </div>
             ))}
             <button type="button" aria-label="Remove education" onClick={() => set("education", p.education.filter((_, j) => j !== i))} className="grid size-11 place-items-center text-ink-3 hover:text-danger">
@@ -90,13 +90,13 @@ export function ProfileEditor({ initial }: { initial: ProfileInput }) {
           <div key={i} className="space-y-2 rounded-control border border-line p-3">
             <div className="flex gap-2">
               <label className="sr-only" htmlFor={`pr-${i}-name`}>Project name</label>
-              <input id={`pr-${i}-name`} className="input" placeholder="Project name" value={pr.name} onChange={(e) => set("projects", p.projects.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} />
+              <input id={`pr-${i}-name`} maxLength={PROFILE_MAX.projects.name} className="input" placeholder="Project name" value={pr.name} onChange={(e) => set("projects", p.projects.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} />
               <button type="button" aria-label="Remove project" onClick={() => set("projects", p.projects.filter((_, j) => j !== i))} className="grid size-11 shrink-0 place-items-center text-ink-3 hover:text-danger">
                 <Trash2 size={20} strokeWidth={1.5} aria-hidden />
               </button>
             </div>
             <label className="sr-only" htmlFor={`pr-${i}-desc`}>What you built</label>
-            <textarea id={`pr-${i}-desc`} rows={3} className="input h-auto py-2 font-serif text-resume" placeholder="What you built and how" value={pr.description} onChange={(e) => set("projects", p.projects.map((x, j) => (j === i ? { ...x, description: e.target.value } : x)))} />
+            <textarea id={`pr-${i}-desc`} maxLength={PROFILE_MAX.projects.description} rows={3} className="input h-auto py-2 font-serif text-resume" placeholder="What you built and how" value={pr.description} onChange={(e) => set("projects", p.projects.map((x, j) => (j === i ? { ...x, description: e.target.value } : x)))} />
           </div>
         ))}
         <Button type="button" variant="text" onClick={() => set("projects", [...p.projects, { name: "", description: "", tech: [] }])}>
