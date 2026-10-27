@@ -45,6 +45,7 @@ export const AlertsBody = z.object({
 
 export const TestAlertBody = z.object({ channel: z.enum(["telegram", "email"]) });
 
+export const ReportBody = z.object({ jobId: uuid, reason: z.enum(["expired", "scam", "wrong_info", "other"]) });
 export const StageBody = z.object({ jobId: uuid, stage: z.enum(["saved", "applied", "interview", "offer", "rejected"]) });
 
 export const DraftEditBody = z.object({

@@ -8,7 +8,7 @@ function mockUser(createdAt: string, opts: { telegram?: number | null; limited?:
   const sendEmail = vi.fn(async () => true);
   const chain = (data: unknown) => {
     const q: Record<string, unknown> = {};
-    for (const k of ["select", "eq", "order", "limit"]) q[k] = () => q;
+    for (const k of ["select", "eq", "gte", "order", "limit"]) q[k] = () => q;
     q.single = async () => ({ data });
     q.then = (r: (v: unknown) => unknown) => r({ data: [{ score: 81, jobs: { id: "j1", title: "SDE Intern", company: "Zepto", location: "Bengaluru", remote: false, apply_url: null, fresher_friendly: true } }] });
     return q;

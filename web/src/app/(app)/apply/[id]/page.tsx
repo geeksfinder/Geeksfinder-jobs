@@ -10,6 +10,7 @@ import { formatJobDescription } from "@/lib/jobtext";
 import { requireUser } from "@/lib/supabase/server";
 import { uuid } from "@/lib/validate";
 import { JobActions } from "./JobActions";
+import { ReportJob } from "./ReportJob";
 
 export const metadata = { title: "Job" };
 
@@ -83,6 +84,8 @@ export default async function ApplyPage({ params, searchParams }: { params: Prom
           </div>
         </details>
       )}
+
+      <ReportJob jobId={job.id} />
     </>
   );
 }

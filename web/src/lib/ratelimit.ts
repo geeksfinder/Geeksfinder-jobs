@@ -12,6 +12,7 @@ const RULES = {
   email: { limit: 15, window: 86_400 }, // HR emails per user per day
   api: { limit: 60, window: 60 }, // general mutations per user per minute
   public: { limit: 20, window: 60 }, // public free tools per IP per minute
+  report: { limit: 10, window: 86_400 }, // "Report this job" per user per day
   testAlert: { limit: 3, window: 86_400 }, // first-day "send a test alert" per user per day
   waStart: { limit: 3, window: 3_600 }, // WhatsApp codes per user, and per number, per hour (SPEC.md W1.2)
   waConfirm: { limit: 10, window: 3_600 }, // WhatsApp code checks per user per hour

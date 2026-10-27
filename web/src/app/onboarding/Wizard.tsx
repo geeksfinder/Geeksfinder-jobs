@@ -10,6 +10,7 @@ import { Button, ButtonLink } from "@/components/ui/Button";
 import { SkillChip } from "@/components/ui/Highlighter";
 import { JobCard } from "@/components/ui/JobCard";
 import { EmptyState, useToast } from "@/components/ui/Toast";
+import { suggestRoles } from "@/lib/branches";
 import { INDIA_CITIES, tidyCity } from "@/lib/cities";
 import { firstMatches, saveAlerts, savePreferences, saveSkills, type FirstMatch } from "./actions";
 
@@ -26,7 +27,6 @@ type Initial = {
 };
 
 const STEPS = ["Upload resume", "Preferences", "Alerts", "Done"];
-const ROLE_SUGGESTIONS = ["Frontend Developer", "Software Engineer", "Data Analyst", "Full Stack Developer", "Python Developer"];
 
 export function Wizard({ initial, review = false, startAtUpload = false }: { initial: Initial; review?: boolean; startAtUpload?: boolean }) {
   const router = useRouter();
@@ -41,6 +41,8 @@ export function Wizard({ initial, review = false, startAtUpload = false }: { ini
   const heading = useRef<HTMLHeadingElement>(null);
 
   useEffect(() => { heading.current?.focus(); }, [step]);
+  // Roles ranked by the student's own skills and branch (lib/branches.ts)
+  const roleList = suggestRoles(skills);
 
   async function next(action: () => Promise<{ ok: boolean; error?: string }>) {
     setBusy(true);
@@ -91,7 +93,7 @@ export function Wizard({ initial, review = false, startAtUpload = false }: { ini
               <Button variant="text" className="mt-2" onClick={() => router.replace("/dashboard")}>Looks right, go to dashboard</Button>
             )}
           </div>
-          <TagInput label="Roles" values={roles} onChange={setRoles} placeholder="Frontend Developer" suggestions={ROLE_SUGGESTIONS} max={10} />
+          <TagInput label="Roles" values={roles} onChange={setRoles} placeholder={roleList[0]} suggestions={roleList} max={10} />
           <TagInput label="Cities" hint="Add Remote to include remote jobs." values={locations} onChange={setLocations} placeholder="Pune" suggestions={INDIA_CITIES} normalize={tidyCity} max={10} />
           <fieldset>
             <legend className="label">Job type</legend>

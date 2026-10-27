@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { BRANCHES, fetchSearches } from "@/lib/branches";
+import { BRANCHES, ROLE_NAMES, fetchSearches, suggestRoles } from "@/lib/branches";
+import { gapText } from "@/components/ui/MatchScore";
+import { hideDecision } from "@/lib/job-reports";
 import { inIndia } from "@/lib/cities";
 import { countHubs, parseHub } from "@/lib/hubs";
 
@@ -54,5 +56,37 @@ describe("branch job pages", () => {
   it("parses the new page addresses", () => {
     expect(parseHub("civil-engineer-fresher-mumbai")?.role?.name).toBe("Civil Engineering");
     expect(parseHub("electronics-engineer-fresher-jobs")?.city).toBeNull();
+  });
+});
+
+describe("role suggestions", () => {
+  it("puts the roles a student's skills point to first", () => {
+    expect(suggestRoles(["SolidWorks", "CATIA", "GD&T", "AutoCAD"])[0]).toBe("Design Engineer");
+    expect(suggestRoles(["STAAD Pro", "ETABS", "AutoCAD"]).slice(0, 2)).toEqual(["Structural Design Engineer", "Structural Engineer"]);
+    expect(suggestRoles(["Verilog", "VHDL", "Digital Electronics"]).slice(0, 3)).toContain("VLSI Design Engineer");
+    expect(suggestRoles(["ReactJS", "JavaScript", "HTML", "CSS"])[0]).toBe("Frontend Developer");
+  });
+  it("still lists every role, once, so anything can be found by typing", () => {
+    const all = suggestRoles([]);
+    expect(all).toHaveLength(ROLE_NAMES.length);
+    expect(new Set(ROLE_NAMES).size).toBe(ROLE_NAMES.length);
+    expect(all[0]).toBe("Software Engineer");
+  });
+});
+
+describe("near matches", () => {
+  it("says what's missing", () => {
+    expect(gapText({ missing_skills: ["SolidWorks"], location_fit: 1, role_fit: 1 })).toBe("Needs SolidWorks");
+    expect(gapText({ missing_skills: ["A", "B", "C", "D"], location_fit: 0, role_fit: 0.5 })).toBe("Needs A, B and 2 more · Outside your cities");
+    expect(gapText({ missing_skills: [], role_fit: 0 })).toBe("A different role from yours");
+  });
+});
+
+describe("report this job", () => {
+  it("hides a job only after 3 different students report it", () => {
+    expect(hideDecision(["scam", "scam"]).hide).toBe(false);
+    expect(hideDecision(["scam", "scam", "expired"])).toEqual({ hide: true, reason: "scam" });
+    expect(hideDecision(["expired", "expired", "other"])).toEqual({ hide: true, reason: "expired" });
+    expect(hideDecision(["wrong_info", "other", "scam"])).toEqual({ hide: true, reason: "other" });
   });
 });

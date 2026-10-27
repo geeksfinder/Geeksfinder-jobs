@@ -6,6 +6,7 @@
  */
 import { withCronRun } from "@/lib/admin/cron-run";
 import { sendEmail } from "@/lib/email";
+import { MATCH_THRESHOLD } from "@/lib/matching";
 import { SITE } from "@/lib/site";
 import { adminClient } from "@/lib/supabase/admin";
 import { esc } from "@/lib/telegram";
@@ -32,7 +33,7 @@ async function main() {
     count("users", (q) => q.gte("created_at", since)),
     count("users"),
     count("subscriptions", (q) => q.in("status", ["active", "authenticated"])),
-    count("matches", (q) => q.gte("created_at", since)),
+    count("matches", (q) => q.gte("created_at", since).gte("score", MATCH_THRESHOLD)),
     count("alert_settings", (q) => q.gte("last_sent_at", since)),
     count("tailored_resumes", (q) => q.gte("created_at", since)),
     count("outreach", (q) => q.gte("sent_at", since)),

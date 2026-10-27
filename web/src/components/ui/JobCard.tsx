@@ -3,7 +3,7 @@ import { cleanCompany } from "@/lib/company";
 import { city, timeAgo } from "@/lib/format";
 import { CompanyLogo } from "./CompanyLogo";
 import { Badge, SkillChip } from "./Highlighter";
-import { MatchScore, reasonText, type MatchReasons } from "./MatchScore";
+import { MatchScore, gapText, reasonText, type MatchReasons } from "./MatchScore";
 
 export type JobCardJob = {
   id: string;
@@ -25,19 +25,22 @@ type Props = {
   mySkills?: string[];
   href?: string;
   actions?: React.ReactNode;
+  /** "Worth a look" rows: say what's missing instead of why it fits (the score stays hidden under 60). */
+  showGap?: boolean;
 };
 
 /**
  * Flat row (DESIGN.md §6). Top: company tile, title, meta + badges, score on the right.
  * Bottom: skill chips and actions — aligned under the title on tablet/desktop, full width on mobile.
  */
-export function JobCard({ job, score, reasons, mySkills, href, actions }: Props) {
+export function JobCard({ job, score, reasons, mySkills, href, actions, showGap }: Props) {
   const mine = new Set((mySkills ?? reasons?.matched_skills ?? []).map((s) => s.toLowerCase()));
   const skills = [...job.skills].sort((a, b) => Number(mine.has(b.toLowerCase())) - Number(mine.has(a.toLowerCase()))).slice(0, 4);
   const intern = /intern/i.test(job.title);
   const where = job.remote ? "Remote" : city(job.location) || "India";
   const hasFooter = skills.length > 0 || Boolean(actions);
   const why = reasons && score !== undefined && score >= 60 ? reasonText(reasons, where) : "";
+  const gap = showGap && reasons ? gapText(reasons) : "";
 
   return (
     <article className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-x-3 gap-y-4 border-b border-line py-5 last:border-b-0">
@@ -64,6 +67,7 @@ export function JobCard({ job, score, reasons, mySkills, href, actions }: Props)
             {intern && <Badge>Internship</Badge>}
           </div>
           {why && <p className="mt-1.5 text-small text-ink-2">Why it fits: {why}</p>}
+          {gap && <p className="mt-1.5 text-small text-ink-2">What&apos;s missing: {gap}</p>}
         </div>
         {score !== undefined && (
           <div className="shrink-0 sm:pt-0.5">

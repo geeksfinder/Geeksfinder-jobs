@@ -5,6 +5,7 @@ import { featureTier } from "@/lib/pricing";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { matchNow } from "@/lib/match-now";
+import { MATCH_THRESHOLD } from "@/lib/matching";
 import { LIMITS } from "@/lib/plan";
 import { rateLimit } from "@/lib/ratelimit";
 import { adminClient, requireUser } from "@/lib/supabase/server";
@@ -112,7 +113,9 @@ export async function firstMatches(): Promise<FirstMatch[]> {
     .from("matches")
     .select("score, reasons, jobs(id, title, company, company_domain, location, remote, fresher_friendly, skills, posted_at)")
     .eq("user_id", user.id)
+    .gte("score", MATCH_THRESHOLD)
     .order("score", { ascending: false })
     .limit(5);
-  return (data ?? []).map((m) => ({ ...(m.jobs as unknown as Omit<FirstMatch, "score" | "reasons">), score: m.score, reasons: m.reasons }));
+  // A job hidden after reports comes back as null through the student's own (RLS) view
+  return (data ?? []).filter((m) => m.jobs).map((m) => ({ ...(m.jobs as unknown as Omit<FirstMatch, "score" | "reasons">), score: m.score, reasons: m.reasons }));
 }

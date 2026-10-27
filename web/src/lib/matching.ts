@@ -1,12 +1,15 @@
 /**
  * Plain-code matching (no AI), per TRD:
  * score = 50×skill overlap + 20×role fit + 15×location fit + 10×fresher bonus + 5×recency
- * Matches ≥ 60 are stored. Skills compare through lib/skills.ts and places through lib/cities.ts.
+ * Matches ≥ 60 are strong (dashboard, alerts); 45–59 are stored too and shown as "Worth a look", never alerted.
+ * Skills compare through lib/skills.ts and places through lib/cities.ts.
  */
 import { placeFit } from "./cities";
 import { canonicalSkill, skillKey } from "./skills";
 
 export const MATCH_THRESHOLD = 60;
+/** Close fits, usually one skill or the city short: listed under "Worth a look", never sent as alerts. */
+export const NEAR_THRESHOLD = 45;
 
 export type MatchProfile = {
   skills: string[];

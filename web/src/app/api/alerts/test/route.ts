@@ -3,6 +3,7 @@ import { getFlag } from "@/lib/admin/flags";
 import { featureTier } from "@/lib/pricing";
 import { alertEmailHtml, alertEmailSubject, canSendTestAlert, sendTelegramAlert, type AlertMatch } from "@/lib/alerts";
 import { sendEmail } from "@/lib/email";
+import { MATCH_THRESHOLD } from "@/lib/matching";
 import { rateLimit } from "@/lib/ratelimit";
 import { badRequest, fail, tooMany, unauthorized } from "@/lib/security";
 import { requireUser } from "@/lib/supabase/server";
@@ -29,7 +30,7 @@ export async function POST(request: Request) {
 
   // Your top 3 matches; if there are none yet, 3 recent fresher-friendly jobs so you still see the format.
   // Read-only: the matches stay un-notified, so they still arrive in your first real alert.
-  const { data: rows } = await supabase.from("matches").select(`score, jobs(${JOB_COLS})`).eq("user_id", user.id).order("score", { ascending: false }).limit(3);
+  const { data: rows } = await supabase.from("matches").select(`score, jobs(${JOB_COLS})`).eq("user_id", user.id).gte("score", MATCH_THRESHOLD).order("score", { ascending: false }).limit(3);
   let matches = ((rows ?? []) as unknown as AlertMatch[]).filter((m) => m.jobs);
   if (!matches.length) {
     const { data: jobs } = await supabase.from("jobs").select(JOB_COLS).eq("fresher_friendly", true).order("posted_at", { ascending: false }).limit(3);

@@ -18,6 +18,16 @@ export function reasonText(r: MatchReasons, city?: string | null) {
     .join(" · ");
 }
 
+/** What keeps a close fit under 60, for "Worth a look": "Needs SolidWorks and CATIA · Outside your cities". */
+export function gapText(r: MatchReasons) {
+  const missing = r.missing_skills ?? [];
+  const skills =
+    missing.length === 0 ? null
+    : missing.length <= 2 ? `Needs ${missing.join(" and ")}`
+    : `Needs ${missing.slice(0, 2).join(", ")} and ${missing.length - 2} more`;
+  return [skills, r.location_fit === 0 ? "Outside your cities" : null, r.role_fit === 0 ? "A different role from yours" : null].filter(Boolean).join(" · ");
+}
+
 /** "87% match" — a number, not a fake ring. Hidden below 60. */
 export function MatchScore({ score, reasons, city }: { score: number; reasons?: MatchReasons; city?: string | null }) {
   if (score < 60) return null;

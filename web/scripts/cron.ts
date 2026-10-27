@@ -18,7 +18,7 @@ import { generateJSON, untrusted } from "@/lib/ai";
 import { sendEmail } from "@/lib/email";
 import { htmlToText, minYearsAsked } from "@/lib/jobtext";
 import { eligible } from "@/lib/match-now";
-import { MATCH_THRESHOLD, scoreMatch } from "@/lib/matching";
+import { MATCH_THRESHOLD, NEAR_THRESHOLD, scoreMatch } from "@/lib/matching";
 import { likelyBranch } from "@/lib/skills";
 import { adminClient } from "@/lib/supabase/admin";
 import { esc, sendTelegram } from "@/lib/telegram";
@@ -436,16 +436,19 @@ ${untrusted("jobs", batch.map((j) => `### id=${j.id}\n${j.title} at ${j.company}
 async function match() {
   // Jobs from the last 3 days; MATCH_DAYS=14 re-scores older ones once after a matching change
   const since = new Date(Date.now() - Number(process.env.MATCH_DAYS ?? 3) * 86_400_000).toISOString();
-  const { data: jobs } = await db.from("jobs").select("id, title, location, remote, skills, fresher_friendly, posted_at, experience_min").eq("enriched", true).gte("created_at", since);
+  const jobs = await allRows<{ id: string; title: string; location: string | null; remote: boolean | null; skills: string[]; fresher_friendly: boolean | null; posted_at: string | null; experience_min: number | null }>((a, b) =>
+    db.from("jobs").select("id, title, location, remote, skills, fresher_friendly, posted_at, experience_min").eq("enriched", true).is("hidden_at", null).gte("created_at", since).order("id").range(a, b),
+  );
   const { data: profiles } = await db.from("profiles").select("user_id, skills, preferred_roles, locations, job_type, experience_level");
   let saved = 0;
   for (const p of profiles ?? []) {
     if (!p.skills?.length) continue;
     const rows = [];
-    for (const j of jobs ?? []) {
+    for (const j of jobs) {
       if (!eligible(p, j)) continue;
       const { score, reasons } = scoreMatch(p, j);
-      if (score >= MATCH_THRESHOLD) rows.push({ user_id: p.user_id, job_id: j.id, score, reasons });
+      // Strong matches (60+) are alerted; near ones (45–59) only appear under "Worth a look"
+      if (score >= NEAR_THRESHOLD) rows.push({ user_id: p.user_id, job_id: j.id, score, reasons });
     }
     if (rows.length) {
       await db.from("matches").upsert(rows, { onConflict: "user_id,job_id", ignoreDuplicates: true });
@@ -499,7 +502,16 @@ async function notify(ctx: CronContext) {
     if (!isDue(s.frequency, u.plan, s.alert_hour ?? 7, s.last_sent_at) || inQuietHours(s.quiet_hours as string | null)) continue;
 
     const limit = u.plan === "pro" ? 10 : 5;
-    const { data } = await db.from("matches").select("job_id, score, jobs(id, title, company, location, remote, apply_url, fresher_friendly)").eq("user_id", s.user_id).eq("notified", false).order("score", { ascending: false }).limit(limit);
+    // Strong matches only, and never a job hidden after reports
+    const { data } = await db
+      .from("matches")
+      .select("job_id, score, jobs!inner(id, title, company, location, remote, apply_url, fresher_friendly, hidden_at)")
+      .eq("user_id", s.user_id)
+      .eq("notified", false)
+      .gte("score", MATCH_THRESHOLD)
+      .is("jobs.hidden_at", null)
+      .order("score", { ascending: false })
+      .limit(limit);
     const matches = (data ?? []) as unknown as MatchRow[];
     if (!matches.length) continue;
 

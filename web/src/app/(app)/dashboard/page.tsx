@@ -7,6 +7,7 @@ import { JobCard } from "@/components/ui/JobCard";
 import { EmptyState } from "@/components/ui/Toast";
 import { jobFacets } from "@/lib/job-facets";
 import { filterRows, searchAllJobs, type JobRow } from "@/lib/job-search";
+import { MATCH_THRESHOLD } from "@/lib/matching";
 import { LIMITS, periodStart } from "@/lib/plan";
 import { requireUser } from "@/lib/supabase/server";
 
@@ -31,7 +32,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
       .eq("user_id", user!.id)
       .order("created_at", { ascending: false })
       .order("score", { ascending: false })
-      .limit(100),
+      .limit(150),
     supabase.from("applications").select("job_id, stage").eq("user_id", user!.id),
     jobFacets(),
   ]);
@@ -41,9 +42,12 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const applied = (tracked ?? []).filter((t) => t.stage !== "saved").length;
   const tailorLeft = Math.max(0, LIMITS[plan].tailor - (usage?.tailor_count ?? 0));
 
-  const all = ((rows ?? []) as unknown as JobRow[]).filter((m) => m.jobs);
-  // No matches yet (new account, or a thin day): open on All jobs instead of an empty list
-  const view = f.view === "all" || (f.view !== "matches" && all.length === 0) ? "all" : "matches";
+  // Hidden jobs come back as null through RLS. Strong matches (60+) are the main list; 45–59 are "Worth a look"
+  const scored = ((rows ?? []) as unknown as JobRow[]).filter((m) => m.jobs);
+  const all = scored.filter((m) => m.score >= MATCH_THRESHOLD);
+  const near = scored.filter((m) => m.score < MATCH_THRESHOLD);
+  // No matches at all yet (new account, or a thin day): open on All jobs instead of an empty list
+  const view = f.view === "all" || (f.view !== "matches" && scored.length === 0) ? "all" : "matches";
   if (view === "all") f.view = "all";
   const mySkills = (profile?.skills ?? []) as string[];
 
@@ -56,12 +60,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const earlier = view === "matches" ? matches.filter((m) => new Date(m.created_at).getTime() < dayAgo) : matches;
   const filtered = Object.entries(f).some(([k, v]) => v && k !== "sort" && k !== "view");
   const newToday = all.filter((m) => new Date(m.created_at).getTime() >= dayAgo).length;
+  const worthALook = view === "matches" ? filterRows(near, f).sort((a, b) => b.score - a.score).slice(0, 10) : [];
 
   const ist = new Date(Date.now() + 5.5 * 3_600_000).getUTCHours();
   const hello = ist < 12 ? "Good morning" : ist < 17 ? "Good afternoon" : "Good evening";
   const first = (u?.name ?? "").trim().split(/\s+/)[0];
 
-  const list = (items: JobRow[]) => (
+  const list = (items: JobRow[], showGap = false) => (
     <div className="panel px-4 md:px-5">
       {items.map((m) => (
         <JobCard
@@ -70,6 +75,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
           score={m.score}
           reasons={m.reasons}
           mySkills={mySkills}
+          showGap={showGap}
           href={`/apply/${m.jobs.id}`}
           actions={
             <>
@@ -162,6 +168,13 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
               </section>
             )}
           </>
+        )}
+        {worthALook.length > 0 && (
+          <section aria-labelledby="worth-a-look">
+            <h2 id="worth-a-look" className="text-small font-semibold text-ink-2">Worth a look</h2>
+            <p className="mb-3 mt-1 text-small text-ink-2">Close fits, each one or two things short. They aren&apos;t sent in your alerts.</p>
+            {list(worthALook, true)}
+          </section>
         )}
       </div>
     </>
