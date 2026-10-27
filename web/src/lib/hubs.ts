@@ -27,6 +27,28 @@ export const ROLES = [
   { slug: "devops-engineer", name: "DevOps Engineer", terms: ["devops", "cloud engineer", "sre"] },
   { slug: "qa-engineer", name: "QA and Testing", phrase: "QA and testing fresher jobs", terms: ["qa engineer", "qa analyst", "sdet", "tester", "test engineer", "quality assurance"] },
   { slug: "ui-ux-designer", name: "UI/UX Designer", terms: ["ui/ux", "ux designer", "ui designer", "product designer"] },
+  // Core branches (lib/branches.ts). Terms stay specific: "design engineer" alone would catch UI and chip design roles
+  { slug: "graduate-engineer-trainee", name: "Graduate Engineer Trainee", phrase: "Graduate engineer trainee jobs", terms: ["graduate engineer", "engineer trainee", "graduate trainee"] },
+  {
+    slug: "mechanical-engineer",
+    name: "Mechanical Engineering",
+    phrase: "Mechanical engineering fresher jobs",
+    terms: ["mechanical", "production engineer", "maintenance engineer", "manufacturing engineer", "cad engineer", "cae engineer"],
+  },
+  {
+    slug: "civil-engineer",
+    name: "Civil Engineering",
+    phrase: "Civil engineering fresher jobs",
+    terms: ["civil", "site engineer", "structural engineer", "quantity surveyor", "planning engineer", "billing engineer"],
+  },
+  { slug: "electrical-engineer", name: "Electrical Engineering", phrase: "Electrical engineering fresher jobs", terms: ["electrical"] },
+  {
+    slug: "electronics-engineer",
+    name: "Electronics, Embedded and VLSI",
+    phrase: "Electronics, embedded and VLSI fresher jobs",
+    terms: ["electronics", "embedded", "vlsi", "firmware", "pcb", "fpga", "hardware engineer", "rf engineer", "design verification"],
+  },
+  { slug: "chemical-engineer", name: "Chemical Engineering", phrase: "Chemical engineering fresher jobs", terms: ["chemical", "chemist"] },
   {
     slug: "sales-marketing",
     name: "Sales and Marketing",

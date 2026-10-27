@@ -7,6 +7,8 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { withCronRun, type CronContext } from "@/lib/admin/cron-run";
 import { getFlag } from "@/lib/admin/flags";
+import { fetchSearches } from "@/lib/branches";
+import { inIndia } from "@/lib/cities";
 import { syncJobCompanies } from "@/lib/company-sync";
 import { plainText } from "@/lib/html-text";
 import { bestApplyLink, isMiddleman, type ApplyOption } from "@/lib/job-quality";
@@ -17,6 +19,7 @@ import { sendEmail } from "@/lib/email";
 import { htmlToText, minYearsAsked } from "@/lib/jobtext";
 import { eligible } from "@/lib/match-now";
 import { MATCH_THRESHOLD, scoreMatch } from "@/lib/matching";
+import { likelyBranch } from "@/lib/skills";
 import { adminClient } from "@/lib/supabase/admin";
 import { esc, sendTelegram } from "@/lib/telegram";
 import { unsubscribeUrl } from "@/lib/unsubscribe";
@@ -57,9 +60,8 @@ type RawJob = {
   posted_at: string | null;
 };
 
-const INDIA_CITY = /india|bengaluru|bangalore|pune|mumbai|hyderabad|chennai|delhi|gurgaon|gurugram|noida|kolkata|ahmedabad|kochi|jaipur|indore|kolhapur|thiruvananthapuram|coimbatore|chandigarh/i;
-/** India locations, or remote roles open to India (not "Remote - US"). */
-const INDIA = { test: (loc: string) => INDIA_CITY.test(loc) || (/remote/i.test(loc) && (/apac|asia|anywhere|worldwide|global/i.test(loc) || /^\s*remote\s*$/i.test(loc))) };
+/** India locations (lib/cities.ts: whole words, so not "Indiana"), or remote roles open to India (not "Remote - US"). */
+const INDIA = { test: (loc: string) => inIndia(loc) || (/remote/i.test(loc) && (/apac|asia|anywhere|worldwide|global/i.test(loc) || /^\s*remote\s*$/i.test(loc))) };
 const stripHtml = (s: string) => htmlToText(s);
 const domainOf = (url?: string | null) => {
   try { return url ? new URL(url.startsWith("http") ? url : `https://${url}`).hostname.replace(/^www\./, "") : null; } catch { return null; }
@@ -92,10 +94,11 @@ async function fetchJSearch(queries: string[]): Promise<RawJob[]> {
   let used = 0;
   let unitCost = pages > 1 ? 3 : 1; // replaced by the measured cost after the second request
   let lastRemaining: number | null = null;
-  // Rotate which searches go first (2 runs a day), so every query gets its turn across the week
+  // Rotate which searches go first (2 runs a day): each run starts where the last one's searches ended, so every
+  // query gets its turn across the week instead of the next run repeating most of the same searches
   const now = new Date(Date.now() + 5.5 * 3_600_000);
   const slot = Math.floor((now.getTime() - Date.UTC(now.getUTCFullYear(), 0, 1)) / 86_400_000) * 2 + (now.getUTCHours() >= 12 ? 1 : 0);
-  const ordered = queries.map((_, i) => queries[(i + slot) % queries.length]);
+  const ordered = queries.map((_, i) => queries[(i + slot * maxPerRun) % queries.length]);
   for (const q of ordered) {
     if (used >= allowed) break;
     try {
@@ -257,9 +260,17 @@ async function fetchSmartRecruiters(): Promise<RawJob[]> {
       }
       const { data: have } = await db.from("jobs").select("source_id").eq("source", "smartrecruiters").in("source_id", list.map((p) => p.id).slice(0, 1000));
       const known = new Set((have ?? []).map((r) => r.source_id));
+      // The same title in the same city is one job to us (hashJob), so repeat postings of a saved job are skipped too
+      const hashOf = (p: Posting) => hashJob({ company: p.company?.name ?? company, title: p.name, remote: !!p.location?.remote, location: p.location?.city || "India" } as RawJob);
+      const hashes = [...new Set(list.map(hashOf))];
+      const knownHash = new Set<string>();
+      for (let i = 0; i < hashes.length; i += 200) {
+        const { data } = await db.from("jobs").select("hash").in("hash", hashes.slice(i, i + 200));
+        data?.forEach((r) => knownHash.add(r.hash));
+      }
       const todo = list
         // Check the title before paying for the detail call; rejected jobs are never saved, so they'd look "new" every run
-        .filter((p) => !known.has(p.id) && (p.experienceLevel?.id ?? "not_applicable") in LEVEL_ORDER && worthKeeping({ title: p.name, description: "" }))
+        .filter((p) => !known.has(p.id) && !knownHash.has(hashOf(p)) && (p.experienceLevel?.id ?? "not_applicable") in LEVEL_ORDER && worthKeeping({ title: p.name, description: "" }))
         .sort((a, b) => LEVEL_ORDER[a.experienceLevel?.id ?? "not_applicable"] - LEVEL_ORDER[b.experienceLevel?.id ?? "not_applicable"])
         .slice(0, cap);
       for (const p of todo) {
@@ -282,11 +293,14 @@ async function fetchSmartRecruiters(): Promise<RawJob[]> {
   return out;
 }
 
-/** Quality gate before saving: drop senior roles and posts asking 4+ years. Students never see them; they'd only cost AI quota. */
+/** Quality gate before saving: drop senior roles, placeholder posts and posts asking 4+ years. Students never see them; they'd only cost AI quota. */
 const STRICT_SENIOR = /\b(senior|sr\.?|staff|principal|director|head of|vp|vice president|chief|architect|manager|lead)\b/i;
 const JUNIOR_OVERRIDE = /\b(intern|internship|trainee|graduate|fresher|apprentice|campus|new grad)\b/i;
+// Placeholder posts that aren't a job ("Looking for something else?", general applications, talent pools)
+const PLACEHOLDER = /looking for something else|general application|open application|talent pool|future opportunit|expression of interest|don.t see (a|the|your) role/i;
 function worthKeeping(j: { title: string; description: string | null }) {
   if (STRICT_SENIOR.test(j.title) && !JUNIOR_OVERRIDE.test(j.title)) return false;
+  if (PLACEHOLDER.test(j.title)) return false;
   return (minYearsAsked(j.description) ?? 0) < 4;
 }
 
@@ -306,14 +320,17 @@ async function fetchRemotive(): Promise<RawJob[]> {
 // ---------- Pipeline ----------
 
 async function ingest(ctx: CronContext) {
-  const { data: profiles } = await db.from("profiles").select("preferred_roles");
+  const { data: profiles } = await db.from("profiles").select("preferred_roles, skills");
   const roleCounts = new Map<string, number>();
-  for (const p of profiles ?? []) for (const r of p.preferred_roles ?? []) roleCounts.set(r.toLowerCase(), (roleCounts.get(r.toLowerCase()) ?? 0) + 1);
-  const queries = [...roleCounts.entries()].sort((a, b) => b[1] - a[1]).map(([r]) => `${r} fresher`);
-  // Always cover the core fresher searches and internships, after whatever roles students asked for
-  for (const q of ["software engineer fresher", "internship", "data analyst fresher", "graduate engineer trainee", "web developer fresher", "fresher jobs"]) {
-    if (!queries.includes(q)) queries.push(q);
+  const perBranch: Record<string, number> = {};
+  for (const p of profiles ?? []) {
+    for (const r of p.preferred_roles ?? []) roleCounts.set(r.toLowerCase(), (roleCounts.get(r.toLowerCase()) ?? 0) + 1);
+    const branch = likelyBranch(p.skills ?? []);
+    if (branch) perBranch[branch] = (perBranch[branch] ?? 0) + 1;
   }
+  // Students' own roles (most asked first) mixed with every branch's searches (lib/branches.ts)
+  const queries = fetchSearches([...roleCounts.entries()].sort((a, b) => b[1] - a[1]).map(([r]) => r), perBranch);
+  log(`${queries.length} searches; students per branch:`, perBranch);
 
   const fetched = (await Promise.all([fetchJSearch(queries), fetchAdzuna(queries), fetchBoards(), fetchSmartRecruiters(), fetchRemotive()])).flat();
   // Senior roles out, and no job whose only apply link is a middleman site, whatever the source
@@ -550,8 +567,8 @@ async function backfill() {
 
 /** One-off: remove stored jobs the quality gate would now reject, unless a student already matched, saved, tailored or emailed about them. */
 async function prune() {
-  const { data: jobs } = await db.from("jobs").select("id, title, description, source").limit(10000);
-  const reject = (jobs ?? []).filter((j) => !worthKeeping(j)).map((j) => j.id);
+  const jobs = await allRows<{ id: string; title: string; description: string | null }>((a, b) => db.from("jobs").select("id, title, description").order("id").range(a, b));
+  const reject = jobs.filter((j) => !worthKeeping(j)).map((j) => j.id);
   const used = new Set<string>();
   for (let i = 0; i < reject.length; i += 200) {
     const ids = reject.slice(i, i + 200);
@@ -562,7 +579,7 @@ async function prune() {
   }
   const remove = reject.filter((id) => !used.has(id));
   for (let i = 0; i < remove.length; i += 200) await db.from("jobs").delete().in("id", remove.slice(i, i + 200));
-  log(`pruned ${remove.length} senior jobs (kept ${used.size} that students already used)`);
+  log(`pruned ${remove.length} senior or placeholder jobs (kept ${used.size} that students already used)`);
   return { pruned: remove.length, kept_in_use: used.size };
 }
 

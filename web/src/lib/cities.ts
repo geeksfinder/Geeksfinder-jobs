@@ -49,6 +49,15 @@ export const INDIA_CITIES = [
   "Guwahati", "Patna", "Ranchi", "Jamshedpur", "Dehradun", "Goa",
 ];
 
+// Industrial towns where core-engineering jobs are posted, beyond the cities students pick from
+const INDUSTRIAL_TOWNS = ["Hosur", "Chakan", "Sanand", "Manesar", "Sriperumbudur", "Ghaziabad", "Faridabad", "Bhiwadi", "Pithampur", "Hinjewadi", "Jamnagar", "Bharuch", "Ankleshwar", "Dahej"];
+const INDIA_WORDS = ["india", ...INDIA_CITIES.filter((c) => c !== REMOTE && c !== ANYWHERE), ...Object.keys(CITY_ALIASES), ...INDUSTRIAL_TOWNS];
+// Whole words only, so "Indiana" and "Indianapolis" aren't India
+const INDIA_RE = new RegExp(`(^|[^a-z])(${INDIA_WORDS.map((w) => w.toLowerCase()).join("|")})([^a-z]|$)`, "i");
+
+/** A job location in India: it names the country or an Indian city or industrial town. */
+export const inIndia = (location: string | null | undefined) => INDIA_RE.test(location ?? "");
+
 /** A city as a student typed it, under the spelling we use ("banglore" → "Bengaluru", "remote" → "Remote"). */
 export function tidyCity(typed: string) {
   const picked = INDIA_CITIES.find((c) => c.toLowerCase() === typed.trim().toLowerCase());

@@ -1,5 +1,5 @@
 {
-  "_comment": "Public job-board APIs (companies publish these for job sites). Verified 2026-10-17: each has jobs in India or India-open remote roles. Check a new one: greenhouse boards-api.greenhouse.io/v1/boards/<slug>/jobs · lever api.lever.co/v0/postings/<slug> · ashby api.ashbyhq.com/posting-api/job-board/<slug> · smartrecruiters api.smartrecruiters.com/v1/companies/<Id>/postings?country=in (Id is case-sensitive)",
+  "_comment": "Public job-board APIs (companies publish these for job sites). Verified 2026-10-17 (core engineering added 2026-10-27: Wabtec, Continental, CynLR): each has jobs in India or India-open remote roles. Check a new one: greenhouse boards-api.greenhouse.io/v1/boards/<slug>/jobs · lever api.lever.co/v0/postings/<slug> · ashby api.ashbyhq.com/posting-api/job-board/<slug> · smartrecruiters api.smartrecruiters.com/v1/companies/<Id>/postings?country=in (Id is case-sensitive)",
   "greenhouse": [
     "razorpaysoftwareprivatelimited", "groww", "druva", "hackerrank", "rubrik", "databricks", "stripe", "airbnb", "slice",
     "coinbase", "gitlab", "mongodb", "elastic", "twilio", "okta", "samsara", "toast", "instacart", "pinterest", "dropbox",
@@ -7,6 +7,6 @@
     "sigmoid", "glance", "purestorage", "commvault"
   ],
   "lever": ["cred", "zeta", "meesho", "paytm", "mindtickle", "fampay", "100ms"],
-  "ashby": ["tekion", "atlan", "snowflake", "sarvam", "bureau"],
-  "smartrecruiters": ["BoschGroup", "swiggy", "freshworks", "servicenow", "NielsenIQ", "Experian", "wise", "grab", "ixigo", "Ubisoft2"]
+  "ashby": ["tekion", "atlan", "snowflake", "sarvam", "bureau", "cynlr"],
+  "smartrecruiters": ["BoschGroup", "swiggy", "freshworks", "servicenow", "NielsenIQ", "Experian", "wise", "grab", "ixigo", "Ubisoft2", "wabtec", "continental"]
 }

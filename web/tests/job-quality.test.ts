@@ -18,3 +18,10 @@ describe("apply links", () => {
     expect(bestApplyLink([{ apply_link: "javascript:alert(1)" }])).toBeNull();
   });
 });
+
+describe("repost blogs", () => {
+  it("treats fresher hiring-news blogs as middlemen", () => {
+    expect(isMiddleman("https://freshersdunia.in/stripe-internship-2026-hiring/")).toBe(true);
+    expect(bestApplyLink([{ apply_link: "https://freshersdunia.in/x" }])).toBeNull();
+  });
+});

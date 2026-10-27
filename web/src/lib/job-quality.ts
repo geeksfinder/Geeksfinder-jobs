@@ -21,6 +21,8 @@ const MIDDLEMEN = [
   "jobvertise.com",
   "mitula.in",
   "trovit.co.in",
+  // Fresher "hiring news" blogs: an ad-filled repost that links on to the employer's own page
+  "freshersdunia.in",
 ];
 
 // Real job boards where students can actually apply; preferred after the employer's own page
