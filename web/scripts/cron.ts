@@ -9,6 +9,8 @@ import { withCronRun, type CronContext } from "@/lib/admin/cron-run";
 import { getFlag } from "@/lib/admin/flags";
 import { syncJobCompanies } from "@/lib/company-sync";
 import { plainText } from "@/lib/html-text";
+import { bestApplyLink, isMiddleman, type ApplyOption } from "@/lib/job-quality";
+import { allRows } from "@/lib/supabase/all-rows";
 import { resolvePlan, tier, type Grant } from "@/lib/entitlement";
 import { generateJSON, untrusted } from "@/lib/ai";
 import { sendEmail } from "@/lib/email";
@@ -117,6 +119,12 @@ async function fetchJSearch(queries: string[]): Promise<RawJob[]> {
       for (const j of (data.data?.jobs ?? data.data ?? []) as Record<string, unknown>[]) {
         if (!j.job_id || !j.job_title || !j.employer_name) continue;
         // Highlights hold the qualifications/responsibilities as lists; keep them for skill extraction
+        // Employer's own page first, then a real job board; never a middleman like JobLeads (lib/job-quality.ts)
+        const apply = bestApplyLink([
+          { apply_link: j.job_apply_link as string | null, is_direct: j.job_apply_is_direct as boolean | null },
+          ...((j.apply_options ?? []) as ApplyOption[]),
+        ]);
+        if (!apply) continue;
         const hl = (j.job_highlights ?? {}) as Record<string, string[]>;
         const lists = Object.entries(hl).map(([k, items]) => `${k}\n${(items ?? []).map((i) => `• ${i}`).join("\n")}`).join("\n\n");
         out.push({
@@ -128,7 +136,7 @@ async function fetchJSearch(queries: string[]): Promise<RawJob[]> {
           location: [j.job_city, j.job_state].filter(Boolean).join(", ") || String(j.job_location ?? "India"),
           remote: !!j.job_is_remote,
           description: [String(j.job_description ?? ""), lists].filter(Boolean).join("\n\n"),
-          apply_url: (j.job_apply_link as string) ?? null,
+          apply_url: apply,
           posted_at: (j.job_posted_at_datetime_utc as string) ?? null,
         });
       }
@@ -308,7 +316,8 @@ async function ingest(ctx: CronContext) {
   }
 
   const fetched = (await Promise.all([fetchJSearch(queries), fetchAdzuna(queries), fetchBoards(), fetchSmartRecruiters(), fetchRemotive()])).flat();
-  const all = fetched.filter(worthKeeping);
+  // Senior roles out, and no job whose only apply link is a middleman site, whatever the source
+  const all = fetched.filter((j) => worthKeeping(j) && !isMiddleman(j.apply_url));
   const bySource = new Map<string, number>();
   for (const j of all) bySource.set(j.source.split(":")[0], (bySource.get(j.source.split(":")[0]) ?? 0) + 1);
   log(`fetched ${fetched.length} jobs, kept ${all.length} after dropping senior roles:`, Object.fromEntries(bySource));
@@ -334,12 +343,34 @@ async function ingest(ctx: CronContext) {
   const companies = await syncJobCompanies(db).catch((e) => (ctx.warn(`company sync failed: ${(e as Error).message}`), { companies_changed: 0, job_domains_filled: 0 }));
   log("companies", companies);
 
+  const middlemen = await dropMiddlemen();
   const { enriched } = await enrich();
   const { matched } = await match();
   const { data: cleaned, error } = await db.rpc("cleanup_old_data");
   log("cleanup", error ? `failed: ${error.message}` : JSON.stringify(cleaned));
   if (error) ctx.warn(`cleanup failed: ${error.message}`);
-  return { fetched: fetched.length, kept: all.length, new: fresh.length, inserted, enriched, matched, ...companies };
+  return { fetched: fetched.length, kept: all.length, new: fresh.length, inserted, enriched, matched, middlemen_removed: middlemen, ...companies };
+}
+
+/**
+ * Remove saved jobs whose apply link is a middleman site (lib/job-quality.ts), unless a student already saved,
+ * tailored, emailed about or applied to one: deleting a job deletes those too, so those stay.
+ */
+async function dropMiddlemen() {
+  const jobs = await allRows<{ id: string; apply_url: string | null }>((a, b) => db.from("jobs").select("id, apply_url").order("id").range(a, b));
+  const bad = jobs.filter((j) => isMiddleman(j.apply_url)).map((j) => j.id);
+  if (!bad.length) return 0;
+  const used = new Set<string>();
+  for (let i = 0; i < bad.length; i += 200) {
+    for (const t of ["applications", "tailored_resumes", "outreach"]) {
+      const { data } = await db.from(t).select("job_id").in("job_id", bad.slice(i, i + 200));
+      data?.forEach((r) => used.add(r.job_id));
+    }
+  }
+  const remove = bad.filter((id) => !used.has(id));
+  for (let i = 0; i < remove.length; i += 200) await db.from("jobs").delete().in("id", remove.slice(i, i + 200));
+  log(`removed ${remove.length} jobs with middleman apply links${used.size ? ` (kept ${used.size} a student already used)` : ""}`);
+  return remove.length;
 }
 
 /** AI once per job, batched 15 per call. */
@@ -534,11 +565,11 @@ async function prune() {
   return { pruned: remove.length, kept_in_use: used.size };
 }
 
-const COMMANDS: Record<string, (ctx: CronContext) => Promise<Record<string, number> | void>> = { ingest, notify, enrich, match, backfill, prune };
+const COMMANDS: Record<string, (ctx: CronContext) => Promise<Record<string, number> | void>> = { ingest, notify, enrich, match, backfill, prune, middlemen: async () => ({ removed: await dropMiddlemen() }) };
 const cmd = process.argv[2];
 const run = COMMANDS[cmd];
 if (!run) {
-  console.error("usage: npx tsx scripts/cron.ts ingest|notify|enrich|match|backfill|prune");
+  console.error("usage: npx tsx scripts/cron.ts ingest|notify|enrich|match|backfill|prune|middlemen");
   process.exit(1);
 }
 // Every run is logged in cron_runs; a failure alerts the owner on Telegram

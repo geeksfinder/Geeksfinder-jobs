@@ -16,35 +16,49 @@ export type AlertMatch = {
 };
 
 const where = (j: AlertMatch["jobs"]) => (j.remote ? "Remote" : j.location ?? "");
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+// Links from job feeds go inside href="…": a stray quote must not end the attribute
+const href = (url: string) => esc(url).replace(/"/g, "%22");
+// Telegram's limit is 4,096 characters per message; leave room for the greeting and the plan note
+const MAX_BODY = 3600;
 
-/** Greeting, one message per job with buttons, then the paid-plan note for free users. Returns true if any job message was delivered. */
-export async function sendTelegramAlert(chatId: number | string, o: { name?: string | null; plan: string; matches: AlertMatch[]; app: string; test?: boolean }) {
-  const ist = new Date(Date.now() + 5.5 * 3_600_000);
+/**
+ * The whole alert as ONE message (DESIGN.md TelegramAlertPreview): greeting, "N new matches", a short block per job
+ * with Open job / Tailor resume / Apply links, the paid-plan note for free users, then two buttons. One message
+ * instead of one per job: 5–10× faster at 7:30 and calmer to read. Returns whether Telegram accepted it.
+ */
+export function telegramAlertText(o: { name?: string | null; plan: string; matches: AlertMatch[]; app: string; test?: boolean }, now = Date.now()) {
+  const ist = new Date(now + 5.5 * 3_600_000);
   const hello = ist.getUTCHours() < 12 ? "Good morning" : "Hi";
   const first = o.name ? `, ${esc(o.name.split(" ")[0])}` : "";
   const intro = o.test
     ? `<b>${hello}${first}</b>\nThis is a test alert. Your real matches arrive like this at your alert time.`
-    : `<b>${hello}${first}</b>\n${o.matches.length} new matches for you`;
-  await sendTelegram(chatId, intro);
+    : `<b>${hello}${first}</b>\n${o.matches.length} new ${o.matches.length === 1 ? "match" : "matches"} for you`;
 
-  let delivered = false;
-  for (const m of o.matches) {
+  const blocks: string[] = [];
+  let length = 0;
+  for (const [i, m] of o.matches.entries()) {
     const j = m.jobs;
-    const text = `<b>${esc(j.title)}</b>\n${esc(cleanCompany(j.company))} · ${esc(where(j))}${j.fresher_friendly ? " · Fresher" : ""}\n<b>${m.score}% match</b>`;
-    const ok = await sendTelegram(chatId, text, [
-      [...(j.apply_url ? [{ text: "Apply", url: j.apply_url }] : []), { text: "Tailor resume", url: `${o.app}/apply/${j.id}?tab=tailor` }],
-      [{ text: "Email HR", url: `${o.app}/apply/${j.id}?tab=email` }, { text: "Open job", url: `${o.app}/apply/${j.id}` }],
-    ]);
-    delivered ||= ok;
-    await sleep(60); // ≤ ~16 msg/s, well under Telegram's limit
+    const links = [`<a href="${o.app}/apply/${j.id}">Open job</a>`, `<a href="${o.app}/apply/${j.id}?tab=tailor">Tailor resume</a>`];
+    if (j.apply_url) links.push(`<a href="${href(j.apply_url)}">Apply</a>`);
+    const block = `${i + 1}. <b>${esc(j.title)}</b>\n${esc(cleanCompany(j.company))} · ${esc(where(j))}${j.fresher_friendly ? " · Fresher" : ""} · <b>${m.score}% match</b>\n${links.join(" · ")}`;
+    if (length + block.length > MAX_BODY) {
+      blocks.push(`…and ${o.matches.length - i} more in the app.`);
+      break;
+    }
+    blocks.push(block);
+    length += block.length;
   }
-  if (o.plan !== "pro") {
-    await sendTelegram(chatId, "Get alerts <b>daily</b> and HR emails with a paid plan — from ₹10 every 15 days or ₹20 a month. Cancel anytime from your UPI app.", [
-      [{ text: "Try free for 7 days", url: `${o.app}/billing` }],
-    ]);
-  }
-  return delivered;
+  const note = o.plan !== "pro" ? "\n\nGet alerts <b>daily</b> and HR emails with a paid plan, from ₹10 every 15 days or ₹20 a month. Cancel anytime from your UPI app." : "";
+  return `${intro}\n\n${blocks.join("\n\n")}${note}`;
+}
+
+export async function sendTelegramAlert(chatId: number | string, o: { name?: string | null; plan: string; matches: AlertMatch[]; app: string; test?: boolean }) {
+  const top = o.matches[0]?.jobs;
+  const buttons = [
+    [...(top ? [{ text: "Tailor top match", url: `${o.app}/apply/${top.id}?tab=tailor` }] : []), { text: "See all matches", url: `${o.app}/dashboard` }],
+    ...(o.plan !== "pro" ? [[{ text: "Try free for 7 days", url: `${o.app}/billing` }]] : []),
+  ];
+  return sendTelegram(chatId, telegramAlertText(o), buttons);
 }
 
 export const alertEmailSubject = (count: number, test?: boolean) =>
