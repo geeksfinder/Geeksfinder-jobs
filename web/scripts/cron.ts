@@ -13,6 +13,7 @@ import { inIndia } from "@/lib/cities";
 import { syncJobCompanies } from "@/lib/company-sync";
 import { decodeEntities, plainText } from "@/lib/html-text";
 import { bestApplyLink, isMiddleman, type ApplyOption } from "@/lib/job-quality";
+import { mapLimit } from "@/lib/pool";
 import { allRows } from "@/lib/supabase/all-rows";
 import { resolvePlan, tier, type Grant } from "@/lib/entitlement";
 import { generateJSON, govtListPrompt, govtNoticePrompt, untrusted } from "@/lib/ai";
@@ -257,6 +258,29 @@ async function fetchBoards(): Promise<RawJob[]> {
   return out;
 }
 
+// ---------- Rejected posts (migration 020) ----------
+
+/** Posts rejected in the last 30 days, so they aren't downloaded again. Empty until migration 020 has run. */
+async function rejectedIds(source: string, ids: string[]): Promise<Set<string>> {
+  const out = new Set<string>();
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data, error } = await db.from("rejected_postings").select("source_id").eq("source", source).in("source_id", ids.slice(i, i + 200));
+    if (error) return out;
+    data?.forEach((r) => out.add(r.source_id));
+  }
+  return out;
+}
+
+/** Remember what the quality check dropped, and forget anything older than 30 days (a re-post gets a fresh look). */
+async function rememberRejected(rows: { source: string; source_id: string; reason: string }[]) {
+  for (let i = 0; i < rows.length; i += 500) {
+    const { error } = await db.from("rejected_postings").upsert(rows.slice(i, i + 500), { onConflict: "source,source_id" });
+    if (error) return 0;
+  }
+  await db.from("rejected_postings").delete().lt("rejected_at", new Date(Date.now() - 30 * 86_400_000).toISOString());
+  return rows.length;
+}
+
 /**
  * SmartRecruiters lists jobs cheaply but needs one call per job for the description, so only new jobs are
  * fetched in full — entry-level and internships first — capped per company per run. Senior levels are skipped.
@@ -279,6 +303,8 @@ async function fetchSmartRecruiters(): Promise<RawJob[]> {
       }
       const { data: have } = await db.from("jobs").select("source_id").eq("source", "smartrecruiters").in("source_id", list.map((p) => p.id).slice(0, 1000));
       const known = new Set((have ?? []).map((r) => r.source_id));
+      // Downloaded and rejected on an earlier morning (senior, 4+ years asked): don't pay for the detail call again
+      const rejected = await rejectedIds("smartrecruiters", list.map((p) => p.id));
       // The same title in the same city is one job to us (hashJob), so repeat postings of a saved job are skipped too
       const hashOf = (p: Posting) => hashJob({ company: p.company?.name ?? company, title: p.name, remote: !!p.location?.remote, location: p.location?.city || "India" } as RawJob);
       const hashes = [...new Set(list.map(hashOf))];
@@ -289,7 +315,7 @@ async function fetchSmartRecruiters(): Promise<RawJob[]> {
       }
       const todo = list
         // Check the title before paying for the detail call; rejected jobs are never saved, so they'd look "new" every run
-        .filter((p) => !known.has(p.id) && !knownHash.has(hashOf(p)) && (p.experienceLevel?.id ?? "not_applicable") in LEVEL_ORDER && worthKeeping({ title: p.name, description: "" }))
+        .filter((p) => !known.has(p.id) && !rejected.has(p.id) && !knownHash.has(hashOf(p)) && (p.experienceLevel?.id ?? "not_applicable") in LEVEL_ORDER && worthKeeping({ title: p.name, description: "" }))
         .sort((a, b) => LEVEL_ORDER[a.experienceLevel?.id ?? "not_applicable"] - LEVEL_ORDER[b.experienceLevel?.id ?? "not_applicable"])
         .slice(0, cap);
       for (const p of todo) {
@@ -494,6 +520,11 @@ async function ingest(ctx: CronContext) {
   const fetched = (await Promise.all([fetchJSearch(queries), fetchAdzuna(queries), fetchBoards(), fetchSmartRecruiters(), fetchRemotive()])).flat();
   // Senior roles out, and no job whose only apply link is a middleman site, whatever the source
   const all = fetched.filter((j) => worthKeeping(j) && !isMiddleman(j.apply_url));
+  const kept = new Set(all);
+  const rejectedRows = fetched
+    .filter((j) => !kept.has(j) && j.source_id)
+    .map((j) => ({ source: j.source.split(":")[0], source_id: String(j.source_id).slice(0, 200), reason: isMiddleman(j.apply_url) ? "middleman" : "senior or 4+ years" }));
+  const remembered = await rememberRejected([...new Map(rejectedRows.map((r) => [`${r.source}|${r.source_id}`, r])).values()]);
   const bySource = new Map<string, number>();
   for (const j of all) bySource.set(j.source.split(":")[0], (bySource.get(j.source.split(":")[0]) ?? 0) + 1);
   log(`fetched ${fetched.length} jobs, kept ${all.length} after dropping senior roles:`, Object.fromEntries(bySource));
@@ -527,7 +558,7 @@ async function ingest(ctx: CronContext) {
   const { data: cleaned, error } = await db.rpc("cleanup_old_data");
   log("cleanup", error ? `failed: ${error.message}` : JSON.stringify(cleaned));
   if (error) ctx.warn(`cleanup failed: ${error.message}`);
-  return { fetched: fetched.length, kept: all.length, new: fresh.length, inserted, enriched, matched, middlemen_removed: middlemen, ...govt, ...companies };
+  return { fetched: fetched.length, kept: all.length, rejected_remembered: remembered, new: fresh.length, inserted, enriched, matched, middlemen_removed: middlemen, ...govt, ...companies };
 }
 
 /**
@@ -648,19 +679,23 @@ async function notify(ctx: CronContext) {
   const emailOn = await getFlag("email_sends", db);
   if (!telegramOn) ctx.warn("telegram_sends is off: no Telegram alerts this run");
   if (!emailOn) ctx.warn("email_sends is off: no email alerts this run");
-  const { data: settings } = await db.from("alert_settings").select("user_id, frequency, channels, alert_hour, quiet_hours, last_sent_at, users(email, telegram_chat_id, plan, name, disabled_at)");
+  // Paged: one request stops at 1,000 rows, and every student past that would silently get no alert
+  type Setting = { user_id: string; frequency: string; channels: string[]; alert_hour: number | null; quiet_hours: unknown; last_sent_at: string | null; users: unknown };
+  const settings = await allRows<Setting>((a, b) =>
+    db.from("alert_settings").select("user_id, frequency, channels, alert_hour, quiet_hours, last_sent_at, users(email, telegram_chat_id, plan, name, disabled_at)").order("user_id").range(a, b),
+  );
   // Pro days granted by an admin count as Pro for alerts (effective plan, SPEC.md §3)
   const nowIso = new Date().toISOString();
   const { data: grantRows } = await db.from("pro_grants").select("user_id, starts_at, ends_at, includes_whatsapp").lte("starts_at", nowIso).gt("ends_at", nowIso);
   const grants = new Map<string, Grant[]>();
   for (const g of grantRows ?? []) grants.set(g.user_id, [...(grants.get(g.user_id) ?? []), g as Grant]);
-  let sent = 0;
-  for (const s of settings ?? []) {
-    const raw = s.users as unknown as { email: string; telegram_chat_id: number | null; plan: string; name: string | null; disabled_at: string | null } | null;
+  // One student's alert: their best unsent strong matches on each channel they chose. True when one got through.
+  const alertOne = async (s: Setting): Promise<boolean> => {
+    const raw = s.users as { email: string; telegram_chat_id: number | null; plan: string; name: string | null; disabled_at: string | null } | null;
     // Disabled accounts get nothing
-    if (!raw || raw.disabled_at) continue;
+    if (!raw || raw.disabled_at) return false;
     const u = { ...raw, plan: tier(resolvePlan(raw.plan, grants.get(s.user_id) ?? [])) };
-    if (!isDue(s.frequency, u.plan, s.alert_hour ?? 7, s.last_sent_at) || inQuietHours(s.quiet_hours as string | null)) continue;
+    if (!isDue(s.frequency, u.plan, s.alert_hour ?? 7, s.last_sent_at) || inQuietHours(s.quiet_hours as string | null)) return false;
 
     const limit = u.plan === "pro" ? 10 : 5;
     // Strong matches only, and never a job hidden after reports
@@ -674,7 +709,7 @@ async function notify(ctx: CronContext) {
       .order("score", { ascending: false })
       .limit(limit);
     const matches = (data ?? []) as unknown as MatchRow[];
-    if (!matches.length) continue;
+    if (!matches.length) return false;
 
     let delivered = false;
     if (telegramOn && s.channels.includes("telegram") && u.telegram_chat_id) {
@@ -688,9 +723,15 @@ async function notify(ctx: CronContext) {
     if (delivered) {
       await db.from("matches").update({ notified: true }).eq("user_id", s.user_id).in("job_id", matches.map((m) => m.job_id));
       await db.from("alert_settings").update({ last_sent_at: new Date().toISOString() }).eq("user_id", s.user_id);
-      sent++;
     }
-  }
+    return delivered;
+  };
+
+  // A few students at a time: an hour's alerts go out in minutes, within Telegram's and Brevo's rate limits
+  const results = await mapLimit(settings, Number(process.env.ALERT_CONCURRENCY ?? 5), alertOne);
+  const sent = results.filter((r) => r === true).length;
+  const failed = results.filter((r) => r instanceof Error);
+  if (failed.length) ctx.warn(`${failed.length} alerts failed: ${(failed[0] as Error).message}`);
   log(`sent digests to ${sent} users`);
   const reminded = telegramOn ? await followUps() : 0;
   await downgradeExpired();

@@ -69,27 +69,34 @@ async function gemini(model: string, prompt: string, json: boolean, file?: AiFil
 }
 
 async function groq(prompt: string, json: boolean): Promise<string> {
-  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
-    body: JSON.stringify({
-      model: GROQ_MODEL,
-      temperature: 0.3,
-      messages: [
-        { role: "system", content: SAFETY },
-        { role: "user", content: prompt },
-      ],
-      ...(json ? { response_format: { type: "json_object" } } : {}),
-    }),
-    signal: AbortSignal.timeout(45_000),
-  });
+  let res: Response;
+  try {
+    res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.GROQ_API_KEY}` },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        temperature: 0.3,
+        messages: [
+          { role: "system", content: SAFETY },
+          { role: "user", content: prompt },
+        ],
+        ...(json ? { response_format: { type: "json_object" } } : {}),
+      }),
+      signal: AbortSignal.timeout(45_000),
+    });
+  } catch {
+    throw new RetryableError("Groq timeout");
+  }
+  // Busy or down (rate limit, overload): worth another round; anything else is a real error
+  if (res.status === 429 || res.status >= 500) throw new RetryableError(`Groq ${res.status}`);
   if (!res.ok) throw new Error(`Groq ${res.status}`);
   const data = await res.json();
   return data.choices?.[0]?.message?.content ?? "";
 }
 
-export async function generate(prompt: string, { json = false, file }: { json?: boolean; file?: AiFile } = {}): Promise<string> {
-  await budget("gemini");
+/** Every Gemini model, then Groq, once. Busy everywhere ends in a RetryableError. */
+async function oneRound(prompt: string, json: boolean, file?: AiFile): Promise<string> {
   if (process.env.GEMINI_API_KEY) {
     for (const model of GEMINI_MODELS) {
       try {
@@ -100,11 +107,34 @@ export async function generate(prompt: string, { json = false, file }: { json?: 
       }
     }
   }
-  // Groq can't read files, so a file request ends here
-  if (file) throw new Error("All Gemini models unavailable; files need Gemini");
-  if (!process.env.GROQ_API_KEY) throw new Error("All Gemini models unavailable and no Groq fallback configured");
+  // Groq can't read files, so a file request waits for Gemini
+  if (file) throw new RetryableError("All Gemini models busy; files need Gemini");
+  if (!process.env.GROQ_API_KEY) throw new RetryableError("All Gemini models busy and no Groq fallback configured");
   await budget("groq");
   return groq(prompt, json);
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * One answer from the first provider that has room. When every provider is busy at once (the 7:30 rush, a provider
+ * outage), wait and go round again (3 s, then 8 s; AI_BUSY_WAITS_MS) instead of failing the student, but never past
+ * a 45-second deadline, so routes stay inside Vercel's 60 seconds. Real errors fail at once.
+ */
+export async function generate(prompt: string, { json = false, file }: { json?: boolean; file?: AiFile } = {}): Promise<string> {
+  await budget("gemini");
+  const waits = (process.env.AI_BUSY_WAITS_MS ?? "3000,8000").split(",").map(Number).filter((n) => n >= 0);
+  const deadline = Date.now() + 45_000;
+  for (let round = 0; ; round++) {
+    try {
+      return await oneRound(prompt, json, file);
+    } catch (e) {
+      const wait = waits[round];
+      if (!(e instanceof RetryableError) || wait === undefined || Date.now() + wait > deadline) throw e;
+      console.warn(`[ai] every provider busy (${e.message}); trying again in ${wait / 1000}s`);
+      await sleep(wait);
+    }
+  }
 }
 
 export async function generateJSON<T>(prompt: string, file?: AiFile): Promise<T> {
