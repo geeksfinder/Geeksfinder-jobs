@@ -16,6 +16,8 @@ export const AREA_ROLES = {
   userActions: ["owner", "ops"],
   deleteData: ["owner"],
   contacts: ["owner", "ops"],
+  // A3 Jobs and sources: hide or expire a job, add or pause a company board
+  jobs: ["owner", "ops"],
   dnc: ["owner", "ops"],
   payments: ["owner", "ops"],
   remind: ["owner", "ops"],

@@ -99,6 +99,19 @@ export const AlertsBody = z.object({
 
 export const TestAlertBody = z.object({ channel: z.enum(["telegram", "email"]) });
 
+/** Admin: hide, expire or unhide a job, given its id or a link that contains it (/apply/<id>). */
+export const AdminJobBody = z.object({
+  job: z.string().trim().max(300).transform((s) => /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.exec(s)?.[0]?.toLowerCase() ?? "").pipe(uuid),
+  action: z.enum(["hide", "expired", "unhide"]),
+  reason: z.enum(["scam", "duplicate", "other"]).default("other"),
+});
+/** Admin: add, pause, resume or remove a company job board. SmartRecruiters ids are case-sensitive, so case is kept. */
+export const AdminBoardBody = z.object({
+  action: z.enum(["add", "pause", "resume", "remove"]),
+  provider: z.enum(["greenhouse", "lever", "ashby", "smartrecruiters"]),
+  slug: z.string().trim().regex(/^[A-Za-z0-9_-]{2,80}$/, "Use the board's id from its job-list address, letters, digits, - and _ only."),
+  company_name: text(120).optional(),
+});
 export const CoverLetterEditBody = z.object({ jobId: uuid, body: text(5000).min(50, "Your letter looks empty. Write a few lines first.") });
 export const ReportBody = z.object({ jobId: uuid, reason: z.enum(["expired", "scam", "wrong_info", "other"]) });
 export const StageBody = z.object({ jobId: uuid, stage: z.enum(["saved", "applied", "interview", "offer", "rejected"]) });

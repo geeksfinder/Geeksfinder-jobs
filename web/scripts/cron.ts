@@ -10,6 +10,7 @@ import { withCronRun, type CronContext } from "@/lib/admin/cron-run";
 import { getFlag } from "@/lib/admin/flags";
 import { fetchSearches } from "@/lib/branches";
 import { inIndia } from "@/lib/cities";
+import { loadBoards, type Boards } from "@/lib/boards";
 import { syncJobCompanies } from "@/lib/company-sync";
 import { decodeEntities, plainText } from "@/lib/html-text";
 import { bestApplyLink, isMiddleman, type ApplyOption } from "@/lib/job-quality";
@@ -104,6 +105,9 @@ const isFresherFriendly = (title: string, minYears: number, aiSaysFresher: boole
  * The free plan is a small monthly quota shared by every run (PC and cloud), so each run reads the quota
  * RapidAPI reports and spends only its fair share for the day: remaining ÷ days until the quota resets.
  */
+/** JSearch quota units left this month, as the last response said (shown in Admin -> Jobs and sources). */
+let jsearchRemaining: number | null = null;
+
 async function fetchJSearch(queries: string[]): Promise<RawJob[]> {
   if (!process.env.RAPIDAPI_KEY) return [];
   const out: RawJob[] = [];
@@ -131,6 +135,7 @@ async function fetchJSearch(queries: string[]): Promise<RawJob[]> {
       if (Number.isFinite(remaining) && Number.isFinite(resetDays)) {
         if (lastRemaining !== null && lastRemaining > remaining) unitCost = lastRemaining - remaining;
         lastRemaining = remaining;
+        jsearchRemaining = remaining;
         const reserve = Number(process.env.JSEARCH_RESERVE ?? 10);
         const runsPerDay = Number(process.env.JSEARCH_RUNS_PER_DAY ?? 2);
         // This run's share includes what it already spent; at the end of the month it can drop to "stop now"
@@ -195,8 +200,18 @@ async function fetchAdzuna(queries: string[]): Promise<RawJob[]> {
   return out;
 }
 
+/** Active company boards: board_sources (Admin -> Jobs and sources), else scripts/boards.json. Read once per run. */
+let boardsOnce: Promise<Boards> | null = null;
+function activeBoards() {
+  boardsOnce ??= loadBoards(db, JSON.parse(readFileSync(new URL("./boards.json", import.meta.url), "utf8"))).then(({ boards, from }) => {
+    log(`company boards from ${from}: ${Object.values(boards).flat().length}`);
+    return boards;
+  });
+  return boardsOnce;
+}
+
 async function fetchBoards(): Promise<RawJob[]> {
-  const boards = JSON.parse(readFileSync(new URL("./boards.json", import.meta.url), "utf8")) as { greenhouse: string[]; lever: string[]; ashby?: string[] };
+  const boards = await activeBoards();
   const out: RawJob[] = [];
   for (const slug of boards.greenhouse) {
     try {
@@ -286,7 +301,7 @@ async function rememberRejected(rows: { source: string; source_id: string; reaso
  * fetched in full — entry-level and internships first — capped per company per run. Senior levels are skipped.
  */
 async function fetchSmartRecruiters(): Promise<RawJob[]> {
-  const boards = JSON.parse(readFileSync(new URL("./boards.json", import.meta.url), "utf8")) as { smartrecruiters?: string[] };
+  const boards = await activeBoards();
   const cap = Number(process.env.SR_DETAIL_LIMIT ?? 120);
   const LEVEL_ORDER: Record<string, number> = { internship: 0, entry_level: 1, associate: 2, not_applicable: 3 };
   const out: RawJob[] = [];
@@ -558,7 +573,11 @@ async function ingest(ctx: CronContext) {
   const { data: cleaned, error } = await db.rpc("cleanup_old_data");
   log("cleanup", error ? `failed: ${error.message}` : JSON.stringify(cleaned));
   if (error) ctx.warn(`cleanup failed: ${error.message}`);
-  return { fetched: fetched.length, kept: all.length, rejected_remembered: remembered, new: fresh.length, inserted, enriched, matched, middlemen_removed: middlemen, ...govt, ...companies };
+  // Per-source counts for Admin -> Jobs and sources (fetched, kept after the quality gate)
+  const perSource: Record<string, number> = {};
+  for (const j of fetched) perSource[`fetched_${j.source.split(":")[0]}`] = (perSource[`fetched_${j.source.split(":")[0]}`] ?? 0) + 1;
+  for (const j of all) perSource[`kept_${j.source.split(":")[0]}`] = (perSource[`kept_${j.source.split(":")[0]}`] ?? 0) + 1;
+  return { ...perSource, ...(jsearchRemaining !== null ? { jsearch_quota_left: jsearchRemaining } : {}), fetched: fetched.length, kept: all.length, rejected_remembered: remembered, new: fresh.length, inserted, enriched, matched, middlemen_removed: middlemen, ...govt, ...companies };
 }
 
 /**

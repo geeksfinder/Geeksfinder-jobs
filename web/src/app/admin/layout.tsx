@@ -12,6 +12,7 @@ const GROUPS: { title: string; links: { href: string; label: string; roles: read
     title: "Operations",
     links: [
       { href: "/admin/users", label: "Users", roles: AREA_ROLES.users },
+      { href: "/admin/jobs", label: "Jobs and sources", roles: AREA_ROLES.jobs },
       { href: "/admin/contacts", label: "HR contacts", roles: AREA_ROLES.contacts },
       { href: "/admin/dnc", label: "Do not contact", roles: AREA_ROLES.dnc },
     ],

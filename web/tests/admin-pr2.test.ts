@@ -47,6 +47,8 @@ const ROUTES = [
   { name: "dnc", load: () => import("@/app/api/admin/dnc/route"), allowed: ["owner", "ops"], body: { email: "hr@zepto.com", action: "add" }, params: none },
   { name: "roles", load: () => import("@/app/api/admin/roles/route"), allowed: ["owner"], body: { email: "asha@example.com", role: "ops" }, params: none },
   { name: "payments/remind", load: () => import("@/app/api/admin/payments/remind/route"), allowed: ["owner", "ops"], body: { user_id: ID }, params: none },
+  { name: "jobs/hide", load: () => import("@/app/api/admin/jobs/hide/route"), allowed: ["owner", "ops"], body: { job: ID, action: "hide", reason: "scam" }, params: none },
+  { name: "boards", load: () => import("@/app/api/admin/boards/route"), allowed: ["owner", "ops"], body: { action: "pause", provider: "lever", slug: "cred" }, params: none },
 ] as const;
 
 describe("every PR 2 admin route is a 404 outside its roles", () => {
@@ -54,7 +56,7 @@ describe("every PR 2 admin route is a 404 outside its roles", () => {
     for (const who of ["anon", "student", "owner", "ops", "marketing", "reviewer"] as const) {
       const ok = (r.allowed as readonly string[]).includes(who);
       it(`${r.name}: ${who} → ${ok ? "allowed" : "404"}`, async () => {
-        const db = await as(who, { alert_settings: { channels: ["email", "telegram"] }, subscriptions: { status: "halted", plan_code: "hustle" } });
+        const db = await as(who, { alert_settings: { channels: ["email", "telegram"] }, subscriptions: { status: "halted", plan_code: "hustle" }, jobs: { id: ID, title: "Trainee", hidden_at: null }, board_sources: { id: "b1", active: true } });
         const res = await (await r.load()).POST(req(r.body), r.params as never);
         if (ok) expect(res.status).not.toBe(404);
         else {
@@ -168,5 +170,44 @@ describe("overview targets", () => {
   it("autopay success counts captured against failed debits", () => {
     expect(overviewMetrics({ ...base, debits_ok_30d: 17, debits_failed_30d: 3 }, now).autopay).toMatchObject({ value: "85%", tone: "ok" });
     expect(overviewMetrics({ ...base, debits_ok_30d: 6, debits_failed_30d: 4 }, now).autopay).toMatchObject({ value: "60%", tone: "warning" });
+  });
+});
+
+describe("A3 jobs and sources", () => {
+  it("hides a job from a pasted link and records who did it", async () => {
+    const db = await as("ops", { jobs: { id: ID, title: "Trainee", hidden_at: null, hidden_reason: null } });
+    const { POST } = await import("@/app/api/admin/jobs/hide/route");
+    const res = await POST(req({ job: `https://geeksfinder-jobs.vercel.app/apply/${ID}?tab=tailor`, action: "hide", reason: "scam" }), none as never);
+    expect(res.status).toBe(200);
+    expect(db.writes).toContainEqual(expect.objectContaining({ table: "jobs", op: "update", value: expect.objectContaining({ hidden_reason: "scam" }) }));
+    expect(db.writes).toContainEqual(expect.objectContaining({ table: "audit_log", op: "insert", value: expect.objectContaining({ action: "job.hide" }) }));
+  });
+  it("shows a hidden job again", async () => {
+    const db = await as("owner", { jobs: { id: ID, title: "Trainee", hidden_at: "2026-10-28T00:00:00Z", hidden_reason: "other" } });
+    const { POST } = await import("@/app/api/admin/jobs/hide/route");
+    expect((await POST(req({ job: ID, action: "unhide" }), none as never)).status).toBe(200);
+    expect(db.writes).toContainEqual(expect.objectContaining({ table: "jobs", op: "update", value: { hidden_at: null, hidden_reason: null } }));
+  });
+  it("refuses something that isn't a job id", async () => {
+    await as("owner");
+    const { POST } = await import("@/app/api/admin/jobs/hide/route");
+    expect((await POST(req({ job: "not a link", action: "hide" }), none as never)).status).toBe(400);
+  });
+  it("checks a new board before adding it, so a typo adds nothing", async () => {
+    const db = await as("ops", { board_sources: null });
+    vi.doMock("@/lib/safe-fetch", () => ({ safeFetch: async () => ({ status: 404, text: "Not found" }) }));
+    const { POST } = await import("@/app/api/admin/boards/route");
+    const res = await POST(req({ action: "add", provider: "greenhouse", slug: "razorpayy" }), none as never);
+    expect(res.status).toBe(422);
+    expect(db.writes).toEqual([]);
+  });
+  it("adds a board whose job list answers", async () => {
+    const db = await as("ops", { board_sources: null });
+    vi.doMock("@/lib/safe-fetch", () => ({ safeFetch: async () => ({ status: 200, text: JSON.stringify({ jobs: [{}, {}, {}] }) }) }));
+    const { POST } = await import("@/app/api/admin/boards/route");
+    const res = await POST(req({ action: "add", provider: "greenhouse", slug: "razorpay", company_name: "Razorpay" }), none as never);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, jobs: 3 });
+    expect(db.writes).toContainEqual(expect.objectContaining({ table: "board_sources", op: "insert" }));
   });
 });
