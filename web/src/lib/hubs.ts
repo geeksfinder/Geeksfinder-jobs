@@ -189,3 +189,28 @@ export async function indexableHubs(): Promise<{ hub: Hub; count: number }[]> {
     .filter((h) => h.count >= HUB_MIN_JOBS)
     .sort((a, b) => b.count - a.count);
 }
+
+const list = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
+
+/**
+ * The hub's answer in one line, plus FAQ entries built only from what the page shows (AEO: AI answers and Google can
+ * quote a dated, specific sentence). Visible text and FAQ markup come from here, so they always agree.
+ */
+export function hubAnswer(name: string, stats: ReturnType<typeof hubStats>, now = Date.now()) {
+  const date = new Date(now).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
+  // "fresher jobs in Pune", but role names keep their capitals ("Data Analyst fresher jobs")
+  const lower = /^(Fresher|Internships|Remote)\b/.test(name) ? `${name.charAt(0).toLowerCase()}${name.slice(1)}` : name;
+  const skills = stats.skills.slice(0, 3).map(([s]) => s);
+  const companies = stats.companies.slice(0, 3).map(([c]) => c);
+  const summary = stats.total
+    ? `${stats.total} live ${stats.total === 1 ? "opening" : "openings"}, ${stats.thisWeek} posted this week.${skills.length ? ` Most asked skills: ${list(skills)}.` : ""} Updated ${date}.`
+    : `No live openings right now. New jobs are added every morning. Updated ${date}.`;
+  const faq = stats.total
+    ? [
+        { q: `How many ${lower} are open right now?`, a: `${stats.total} live openings on GeeksFinder as of ${date}, ${stats.thisWeek} of them posted in the last 7 days.` },
+        ...(skills.length ? [{ q: "Which skills do companies ask for most?", a: stats.skills.slice(0, 5).map(([s, n]) => `${s} (${n} jobs)`).join(", ") + "." }] : []),
+        ...(companies.length ? [{ q: "Which companies are hiring?", a: `${list(companies)} have the most openings here this week.` }] : []),
+      ]
+    : [];
+  return { summary, faq, date };
+}

@@ -6,8 +6,8 @@ import { PublicShell } from "@/components/landing/PublicShell";
 import { ButtonLink } from "@/components/ui/Button";
 import { JobCard } from "@/components/ui/JobCard";
 import { companiesHiring, companyLinkFinder } from "@/lib/company-pages";
-import { CITIES, HUB_MIN_JOBS, ROLES, hubCounts, hubJobs, hubName, hubSlug, hubStats, parseHub } from "@/lib/hubs";
-import { JsonLd, breadcrumbSchema, fitTitle } from "@/lib/seo";
+import { CITIES, HUB_MIN_JOBS, ROLES, hubAnswer, hubCounts, hubJobs, hubName, hubSlug, hubStats, parseHub } from "@/lib/hubs";
+import { JsonLd, breadcrumbSchema, faqSchema, fitTitle } from "@/lib/seo";
 
 export const revalidate = 3600;
 
@@ -59,18 +59,23 @@ export default async function HubPage({ params }: { params: Promise<{ hub: strin
     groups.push({ title: "Other cities", links: live(CITIES.filter((c) => c.slug !== hub.city!.slug).map((c) => item(null, c))) });
   }
   const shown = groups.filter((g) => g.links.length);
+  // The page loads the newest 60; the true live count comes from the hub index (llms.txt and the sitemap use it too)
+  const liveCount = Math.max(stats.total, counts.get(hub.slug) ?? 0);
+  const answer = hubAnswer(name, { ...stats, total: liveCount });
 
   return (
     <PublicShell>
-      <JsonLd data={breadcrumbSchema([{ name: "Jobs", path: "/jobs" }, { name, path: `/jobs/${hub.slug}` }])} />
+      <JsonLd data={[breadcrumbSchema([{ name: "Jobs", path: "/jobs" }, { name, path: `/jobs/${hub.slug}` }]), ...(answer.faq.length ? [faqSchema(answer.faq.map(({ q, a }) => ({ q, a })))] : [])]} />
       <div className="wrap pb-24 pt-8 md:pt-12">
         <nav aria-label="Breadcrumb" className="text-small text-ink-2">
           <Link href="/jobs" className="underline-offset-4 hover:underline">Jobs</Link> <span aria-hidden>/</span> {hub.role?.name ?? hub.city?.name}
         </nav>
         <h1 className="mt-3 max-w-[30ch] text-h1 font-bold md:text-h1-lg">{name}</h1>
+        {/* One dated, specific sentence that answers the search (AEO); the FAQ markup above says the same */}
+        <p className="mt-2 max-w-[70ch] text-body text-ink-2">{answer.summary}</p>
 
         <dl className="mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-panel border border-line bg-line sm:grid-cols-3">
-          <div className="bg-paper p-4"><dt className="text-small text-ink-2">Live openings</dt><dd className="tabular text-h2 font-semibold">{stats.total}</dd></div>
+          <div className="bg-paper p-4"><dt className="text-small text-ink-2">Live openings</dt><dd className="tabular text-h2 font-semibold">{liveCount}</dd></div>
           <div className="bg-paper p-4"><dt className="text-small text-ink-2">Posted this week</dt><dd className="tabular text-h2 font-semibold">{stats.thisWeek}</dd></div>
           <div className="col-span-2 bg-paper p-4 sm:col-span-1">
             <dt className="text-small text-ink-2">Top hiring</dt>

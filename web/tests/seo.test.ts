@@ -67,3 +67,20 @@ describe("article schema", () => {
     expect(articleSchema({ ...base, updated_at: "2026-10-20T00:00:00Z" }).dateModified).toBe("2026-10-20T00:00:00Z");
   });
 });
+
+describe("hub answers for AI search", () => {
+  it("states the live count, this week's count, top skills and the date, and the FAQ says the same", async () => {
+    const { hubAnswer } = await import("@/lib/hubs");
+    const stats = { total: 42, thisWeek: 12, skills: [["Python", 18], ["SQL", 12], ["Excel", 9], ["Git", 4]] as [string, number][], companies: [["Bosch", 6], ["Wabtec", 4]] as [string, number][] };
+    const a = hubAnswer("Data Analyst fresher jobs in Pune", stats, Date.UTC(2026, 9, 28, 1, 0));
+    expect(a.summary).toBe("42 live openings, 12 posted this week. Most asked skills: Python, SQL and Excel. Updated 28 Oct 2026.");
+    expect(a.faq.map((f) => f.q)).toEqual(["How many Data Analyst fresher jobs in Pune are open right now?", "Which skills do companies ask for most?", "Which companies are hiring?"]);
+    expect(a.faq[0].a).toContain("42 live openings");
+    expect(a.faq[2].a).toBe("Bosch and Wabtec have the most openings here this week.");
+  });
+  it("has no FAQ for an empty page", async () => {
+    const { hubAnswer } = await import("@/lib/hubs");
+    expect(hubAnswer("Remote fresher jobs", { total: 0, thisWeek: 0, skills: [], companies: [] }).faq).toEqual([]);
+    expect(hubAnswer("Fresher jobs in Pune", { total: 3, thisWeek: 1, skills: [], companies: [] }).faq[0].q).toBe("How many fresher jobs in Pune are open right now?");
+  });
+});
