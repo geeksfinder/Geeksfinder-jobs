@@ -112,6 +112,14 @@ export const AdminBoardBody = z.object({
   slug: z.string().trim().regex(/^[A-Za-z0-9_-]{2,80}$/, "Use the board's id from its job-list address, letters, digits, - and _ only."),
   company_name: text(120).optional(),
 });
+/** Admin: add an ambassador with their own link code (/r/PUNE-AMB-07), or pause or resume one. */
+export const AmbassadorBody = z.object({
+  action: z.enum(["add", "pause", "resume"]),
+  code: z.string().trim().toUpperCase().regex(/^[A-Z0-9-]{4,24}$/, "Codes are 4–24 letters, digits and dashes, like PUNE-AMB-07."),
+  name: text(100).optional(),
+  college: text(150).optional(),
+  city: text(60).optional(),
+});
 /** Admin: re-run one of the scheduled jobs through GitHub Actions (the same task names as daily.yml). */
 export const CronRerunBody = z.object({ task: z.enum(["ingest", "notify", "news", "report"]) });
 export const CoverLetterEditBody = z.object({ jobId: uuid, body: text(5000).min(50, "Your letter looks empty. Write a few lines first.") });

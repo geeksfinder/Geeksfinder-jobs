@@ -23,6 +23,9 @@ export const AREA_ROLES = {
   crons: ["owner", "ops"],
   ai: ["owner", "ops"],
   tailoring: ["owner", "ops"],
+  // A12 Funnel and acquisition, A13 Ambassadors (create codes, pause them)
+  funnel: ["owner", "ops", "marketing"],
+  ambassadors: ["owner", "marketing"],
   dnc: ["owner", "ops"],
   payments: ["owner", "ops"],
   remind: ["owner", "ops"],

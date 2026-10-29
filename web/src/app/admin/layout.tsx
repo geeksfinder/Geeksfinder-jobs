@@ -22,6 +22,13 @@ const GROUPS: { title: string; links: { href: string; label: string; roles: read
     ],
   },
   { title: "Money", links: [{ href: "/admin/payments", label: "Payments", roles: AREA_ROLES.payments }] },
+  {
+    title: "Growth",
+    links: [
+      { href: "/admin/funnel", label: "Funnel and acquisition", roles: AREA_ROLES.funnel },
+      { href: "/admin/ambassadors", label: "Ambassadors", roles: AREA_ROLES.ambassadors },
+    ],
+  },
   { title: "Content", links: [{ href: "/admin/drafts", label: "Review queue", roles: AREA_ROLES.drafts }] },
   { title: "System", links: [{ href: "/admin/system", label: "System and security", roles: AREA_ROLES.system }] },
 ];
