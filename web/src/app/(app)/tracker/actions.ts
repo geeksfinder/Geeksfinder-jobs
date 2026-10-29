@@ -2,7 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { rateLimit } from "@/lib/ratelimit";
-import { requireUser } from "@/lib/supabase/server";
+import { track } from "@/lib/events";
+import { adminClient, requireUser } from "@/lib/supabase/server";
 import { StageBody } from "@/lib/validate";
 
 export type Stage = "saved" | "applied" | "interview" | "offer" | "rejected";
@@ -17,5 +18,6 @@ export async function setStage(jobId: string, stage: Stage, onlyIfNew = false) {
 
   const row = { user_id: user.id, job_id: parsed.data.jobId, stage: parsed.data.stage, updated_at: new Date().toISOString() };
   await supabase.from("applications").upsert(row, { onConflict: "user_id,job_id", ignoreDuplicates: onlyIfNew });
+  if (parsed.data.stage === "applied") await track(adminClient(), "first_action", user.id, { action: "apply" });
   revalidatePath("/tracker");
 }

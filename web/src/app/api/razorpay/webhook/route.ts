@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { track } from "@/lib/events";
 import { getFlag } from "@/lib/admin/flags";
 import { adminClient } from "@/lib/supabase/admin";
 import { verifyWebhook } from "@/lib/razorpay";
@@ -50,6 +51,7 @@ export async function POST(request: Request) {
     case "subscription.activated":
       await update({ current_period_end: row?.current_period_end ?? row?.trial_end ?? new Date(Date.now() + 7 * DAY).toISOString() });
       await setPlan(paid);
+      await track(admin, "trial_started", userId, { plan: planCode });
       break;
 
     case "subscription.charged": {
@@ -61,6 +63,10 @@ export async function POST(request: Request) {
           { user_id: userId, razorpay_payment_id: pay.id, amount: pay.amount, status: pay.status, paid_at: new Date(pay.created_at * 1000).toISOString() },
           { onConflict: "razorpay_payment_id" },
         );
+        // Funnel: the first captured debit is "paid_first", the second "renewed" (each recorded once per student)
+        const { count } = await admin.from("payments").select("razorpay_payment_id", { count: "exact", head: true }).eq("user_id", userId).eq("status", "captured");
+        if (pay.status === "captured" && count === 1) await track(admin, "paid_first", userId, { plan: planCode, amount: pay.amount });
+        if (pay.status === "captured" && count === 2) await track(admin, "renewed", userId, { plan: planCode, amount: pay.amount });
       }
       await setPlan(paid);
       break;

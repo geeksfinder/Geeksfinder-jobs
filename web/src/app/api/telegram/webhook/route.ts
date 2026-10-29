@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "crypto";
+import { track } from "@/lib/events";
 import { NextResponse } from "next/server";
 import { adminClient } from "@/lib/supabase/admin";
 import { esc, sendTelegram } from "@/lib/telegram";
@@ -32,6 +33,7 @@ export async function POST(request: Request) {
       // One-time: clear the code; unlink this chat from any other account first
       await admin.from("users").update({ telegram_chat_id: null }).eq("telegram_chat_id", chatId);
       await admin.from("users").update({ telegram_chat_id: chatId, telegram_link_code: null, telegram_link_expires_at: null }).eq("id", user.id);
+      await track(admin, "channel_connected", user.id, { channel: "telegram" });
       const { data: a } = await admin.from("alert_settings").select("channels").eq("user_id", user.id).maybeSingle();
       if (a && !a.channels.includes("telegram")) {
         await admin.from("alert_settings").update({ channels: [...a.channels, "telegram"] }).eq("user_id", user.id);

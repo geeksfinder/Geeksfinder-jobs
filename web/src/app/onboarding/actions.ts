@@ -5,6 +5,7 @@ import { featureTier } from "@/lib/pricing";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { matchNow } from "@/lib/match-now";
+import { track } from "@/lib/events";
 import { MATCH_THRESHOLD } from "@/lib/matching";
 import { LIMITS } from "@/lib/plan";
 import { rateLimit } from "@/lib/ratelimit";
@@ -38,6 +39,7 @@ export async function savePreferences(input: z.infer<typeof PrefsBody>): Promise
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0].message };
   if (!parsed.data.preferred_roles.length) return { ok: false, error: "Add at least one role you want." };
   await supabase.from("profiles").upsert({ user_id: user.id, ...parsed.data, updated_at: new Date().toISOString() });
+  await track(adminClient(), "prefs_saved", user.id, { roles: parsed.data.preferred_roles.length, cities: parsed.data.locations.length });
   return { ok: true };
 }
 
@@ -75,6 +77,8 @@ export async function saveAlerts(input: z.input<typeof AlertsBody>): Promise<Res
   // Saving alerts is the last setup step: from now on sign-in goes straight to the dashboard (lib/landing.ts).
   // Written with the service role: onboarded_at isn't user-writable.
   await adminClient().from("users").update({ onboarded_at: new Date().toISOString() }).eq("id", user.id).is("onboarded_at", null);
+  // Email is confirmed by the sign-in code, so choosing it connects a channel; Telegram counts when the bot links
+  if (channels.includes("email")) await track(adminClient(), "channel_connected", user.id, { channel: "email" });
   revalidatePath("/alerts");
   return { ok: true };
 }

@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { ATTR_COOKIE } from "@/lib/attribution";
 import { afterSignIn } from "@/lib/landing";
 import { adminClient, requireUser } from "@/lib/supabase/server";
 
@@ -7,6 +9,6 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const { user } = await requireUser();
   if (!user) return NextResponse.redirect(new URL("/login", url.origin));
-  const dest = await afterSignIn(adminClient(), user.id, url.searchParams.get("next"));
+  const dest = await afterSignIn(adminClient(), user.id, url.searchParams.get("next"), (await cookies()).get(ATTR_COOKIE)?.value);
   return NextResponse.redirect(new URL(dest, url.origin));
 }

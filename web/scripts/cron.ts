@@ -14,6 +14,7 @@ import { loadBoards, type Boards } from "@/lib/boards";
 import { syncJobCompanies } from "@/lib/company-sync";
 import { decodeEntities, plainText } from "@/lib/html-text";
 import { bestApplyLink, isMiddleman, type ApplyOption } from "@/lib/job-quality";
+import { track } from "@/lib/events";
 import { mapLimit } from "@/lib/pool";
 import { allRows } from "@/lib/supabase/all-rows";
 import { resolvePlan, tier, type Grant } from "@/lib/entitlement";
@@ -740,6 +741,7 @@ async function notify(ctx: CronContext) {
       delivered = (await sendEmail(u.email, alertEmailSubject(matches.length), html, { unsubscribeUrl: unsub })) || delivered;
     }
     if (delivered) {
+      await track(db, "first_alert_delivered", s.user_id, { matches: matches.length });
       await db.from("matches").update({ notified: true }).eq("user_id", s.user_id).in("job_id", matches.map((m) => m.job_id));
       await db.from("alert_settings").update({ last_sent_at: new Date().toISOString() }).eq("user_id", s.user_id);
     }

@@ -3,7 +3,8 @@ import { extractText, getDocumentProxy } from "unpdf";
 import { AiBudgetError, generateJSON, resumeParsePrompt, type ParsedResume } from "@/lib/ai";
 import { rateLimit } from "@/lib/ratelimit";
 import { badRequest, fail, isPdf, tooMany, unauthorized } from "@/lib/security";
-import { requireUser } from "@/lib/supabase/server";
+import { track } from "@/lib/events";
+import { adminClient, requireUser } from "@/lib/supabase/server";
 import { fitParsedProfile } from "@/lib/validate";
 
 export const runtime = "nodejs";
@@ -66,5 +67,6 @@ export async function POST(request: Request) {
   if (parsed.phone) updates.phone = String(parsed.phone).replace(/[^+\d\s-]/g, "").slice(0, 20);
   if (Object.keys(updates).length) await supabase.from("users").update(updates).eq("id", user.id);
 
+  await track(adminClient(), "profile_ready", user.id, { skills: skills.length });
   return NextResponse.json({ skills, name: updates.name ?? "" });
 }

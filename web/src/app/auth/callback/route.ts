@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { ATTR_COOKIE } from "@/lib/attribution";
 import { afterSignIn } from "@/lib/landing";
 import { adminClient, createClient } from "@/lib/supabase/server";
 
@@ -16,7 +18,7 @@ export async function GET(request: Request) {
       if (url.searchParams.get("consent") === "1") {
         await supabase.from("users").update({ consent_at: new Date().toISOString() }).eq("id", data.user.id).is("consent_at", null);
       }
-      dest = await afterSignIn(adminClient(), data.user.id, wanted);
+      dest = await afterSignIn(adminClient(), data.user.id, wanted, (await cookies()).get(ATTR_COOKIE)?.value);
     }
   }
   return NextResponse.redirect(new URL(dest, url.origin));

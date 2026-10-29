@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { AiBudgetError, generateJSON, tailorPrompt, type ParsedResume } from "@/lib/ai";
+import { track } from "@/lib/events";
 import { consume } from "@/lib/plan";
 import { rateLimit } from "@/lib/ratelimit";
 import { diffLines, enforceNoNewSkills, loadResume } from "@/lib/resume";
@@ -50,5 +51,6 @@ export async function POST(request: Request) {
 
   const { data: row, error } = await admin.from("tailored_resumes").insert({ user_id: user.id, job_id: body.jobId, content: tailored }).select("id").single();
   if (error) return fail("tailor.save", error);
+  await track(admin, "first_action", user.id, { action: "tailor" });
   return NextResponse.json({ id: row.id, lines: diffLines(original, tailored) });
 }

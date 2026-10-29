@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { AiBudgetError, coverLetterPrompt, generateJSON, type ParsedResume } from "@/lib/ai";
+import { track } from "@/lib/events";
 import { rateLimit } from "@/lib/ratelimit";
 import { badRequest, fail, tooMany, unauthorized } from "@/lib/security";
 import { adminClient, requireUser } from "@/lib/supabase/server";
@@ -58,6 +59,7 @@ export async function POST(request: Request) {
     .select("id, body")
     .single();
   if (error) return fail("cover.save", error);
+  await track(admin, "first_action", user.id, { action: "cover_letter" });
   return NextResponse.json(row);
 }
 

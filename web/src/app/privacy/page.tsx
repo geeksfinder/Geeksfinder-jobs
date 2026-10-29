@@ -19,6 +19,8 @@ export default function Privacy() {
       </ul>
       <h2>Why</h2>
       <p>To match you with jobs, send alerts, tailor your resume, draft emails to HR, and manage your subscription. Resume text is sent to our AI providers (Google Gemini and Groq) only to do these tasks.</p>
+      <h2>Cookies</h2>
+      <p>A sign-in cookie keeps you logged in. A second cookie, gf_attr, remembers for 30 days which link or site first brought you here (for example an Instagram post or a college ambassador&apos;s link), so we know which channels help students. It holds no name, email or resume data, and it&apos;s saved with your account only if you sign up. We use no advertising or tracking cookies from other companies.</p>
       <h2>Storage and security</h2>
       <p>Resumes are stored in a private bucket. Links to view them expire after 10 minutes. Each account can only read its own data. Secrets and keys never reach your browser.</p>
       <h2>Sharing</h2>

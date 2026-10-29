@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { track } from "@/lib/events";
 import { AiBudgetError, generateJSON, outreachPrompt } from "@/lib/ai";
 import { findContact } from "@/lib/finder";
 import { consume } from "@/lib/plan";
@@ -33,6 +34,7 @@ export async function POST(request: Request) {
     const draft = await generateJSON<{ subject: string; email: string; linkedin_note: string }>(
       outreachPrompt(resume, { ...job, description: job.description ?? "" }, contact?.name),
     );
+    await track(admin, "first_action", user.id, { action: "email_hr" });
     return NextResponse.json({
       contact,
       subject: oneLine(String(draft.subject ?? ""), 120),

@@ -10,5 +10,6 @@ export default defineConfig({
   },
   esbuild: { jsx: "automatic" },
   oxc: { jsx: { runtime: "automatic" } },
-  test: { environment: "node", include: ["tests/**/*.test.ts"] },
+  // 15 s: the first import of the PDF and AI modules can pass 5 s on a busy machine or CI runner
+  test: { environment: "node", include: ["tests/**/*.test.ts"], testTimeout: 15_000 },
 });
