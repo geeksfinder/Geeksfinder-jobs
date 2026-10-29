@@ -112,6 +112,8 @@ export const AdminBoardBody = z.object({
   slug: z.string().trim().regex(/^[A-Za-z0-9_-]{2,80}$/, "Use the board's id from its job-list address, letters, digits, - and _ only."),
   company_name: text(120).optional(),
 });
+/** Admin: re-run one of the scheduled jobs through GitHub Actions (the same task names as daily.yml). */
+export const CronRerunBody = z.object({ task: z.enum(["ingest", "notify", "news", "report"]) });
 export const CoverLetterEditBody = z.object({ jobId: uuid, body: text(5000).min(50, "Your letter looks empty. Write a few lines first.") });
 export const ReportBody = z.object({ jobId: uuid, reason: z.enum(["expired", "scam", "wrong_info", "other"]) });
 export const StageBody = z.object({ jobId: uuid, stage: z.enum(["saved", "applied", "interview", "offer", "rejected"]) });

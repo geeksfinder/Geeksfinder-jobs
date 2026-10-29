@@ -18,6 +18,11 @@ export const AREA_ROLES = {
   contacts: ["owner", "ops"],
   // A3 Jobs and sources: hide or expire a job, add or pause a company board
   jobs: ["owner", "ops"],
+  // A4 Matching, A5 Alerts and crons (re-run a cron), A7 AI usage, A8 Tailoring + A9 HR outreach
+  matching: ["owner", "ops"],
+  crons: ["owner", "ops"],
+  ai: ["owner", "ops"],
+  tailoring: ["owner", "ops"],
   dnc: ["owner", "ops"],
   payments: ["owner", "ops"],
   remind: ["owner", "ops"],

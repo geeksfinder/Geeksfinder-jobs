@@ -49,6 +49,7 @@ const ROUTES = [
   { name: "payments/remind", load: () => import("@/app/api/admin/payments/remind/route"), allowed: ["owner", "ops"], body: { user_id: ID }, params: none },
   { name: "jobs/hide", load: () => import("@/app/api/admin/jobs/hide/route"), allowed: ["owner", "ops"], body: { job: ID, action: "hide", reason: "scam" }, params: none },
   { name: "boards", load: () => import("@/app/api/admin/boards/route"), allowed: ["owner", "ops"], body: { action: "pause", provider: "lever", slug: "cred" }, params: none },
+  { name: "crons/rerun", load: () => import("@/app/api/admin/crons/rerun/route"), allowed: ["owner", "ops"], body: { task: "ingest" }, params: none },
 ] as const;
 
 describe("every PR 2 admin route is a 404 outside its roles", () => {
@@ -209,5 +210,34 @@ describe("A3 jobs and sources", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true, jobs: 3 });
     expect(db.writes).toContainEqual(expect.objectContaining({ table: "board_sources", op: "insert" }));
+  });
+});
+
+describe("A5 re-run a cron", () => {
+  it("starts the daily workflow on GitHub with the task, and records who did it", async () => {
+    process.env.GITHUB_ACTIONS_TOKEN = "t";
+    process.env.GITHUB_REPOSITORY = "geeksfinder/Geeksfinder-jobs";
+    const db = await as("ops");
+    const calls: { url: string; body: string }[] = [];
+    vi.stubGlobal("fetch", async (url: string, init: RequestInit) => (calls.push({ url, body: String(init.body) }), new Response(null, { status: 204 })));
+    const { POST } = await import("@/app/api/admin/crons/rerun/route");
+    expect((await POST(req({ task: "notify" }), none as never)).status).toBe(200);
+    expect(calls[0].url).toBe("https://api.github.com/repos/geeksfinder/Geeksfinder-jobs/actions/workflows/daily.yml/dispatches");
+    expect(JSON.parse(calls[0].body)).toEqual({ ref: "main", inputs: { task: "notify" } });
+    expect(db.writes).toContainEqual(expect.objectContaining({ table: "audit_log", value: expect.objectContaining({ action: "cron.rerun" }) }));
+    vi.unstubAllGlobals();
+  });
+  it("says what's wrong when GitHub refuses the token", async () => {
+    process.env.GITHUB_ACTIONS_TOKEN = "bad";
+    process.env.GITHUB_REPOSITORY = "geeksfinder/Geeksfinder-jobs";
+    await as("owner");
+    vi.stubGlobal("fetch", async () => new Response("{}", { status: 403 }));
+    const { POST } = await import("@/app/api/admin/crons/rerun/route");
+    const res = await POST(req({ task: "ingest" }), none as never);
+    expect(res.status).toBe(502);
+    expect((await res.json()).error.message).toMatch(/refused the token/);
+    vi.unstubAllGlobals();
+    delete process.env.GITHUB_ACTIONS_TOKEN;
+    delete process.env.GITHUB_REPOSITORY;
   });
 });

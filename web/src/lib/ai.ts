@@ -15,6 +15,8 @@ const GEMINI_MODELS = (process.env.GEMINI_MODELS ?? "gemini-3.8-flash,gemini-3.5
   .filter(Boolean);
 const GROQ_MODEL = process.env.GROQ_MODEL ?? "llama-3.3-70b-versatile";
 const DAILY_CAP = Number(process.env.AI_DAILY_CALL_CAP ?? 1200);
+/** Gemini calls allowed per day before AI stops (Admin -> AI usage shows it against today's count). */
+export const AI_DAILY_CAP = DAILY_CAP;
 
 export class AiBudgetError extends Error {}
 class RetryableError extends Error {}
