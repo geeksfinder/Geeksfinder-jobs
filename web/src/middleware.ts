@@ -18,9 +18,17 @@ function sameOrigin(req: NextRequest) {
   }
 }
 
+// The old address: once NEXT_PUBLIC_APP_URL is the new domain, its pages redirect there for good (SEO keeps the
+// old links' value). Webhooks and API calls are left alone until Telegram and Razorpay point at the new domain.
+const OLD_HOST = "geeksfinder-jobs.vercel.app";
+
 export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const isApi = path.startsWith("/api/") || path.startsWith("/auth/");
+  const site = process.env.NEXT_PUBLIC_APP_URL ?? "";
+  if (request.headers.get("host") === OLD_HOST && !isApi && /^https:\/\//.test(site) && !site.includes(OLD_HOST)) {
+    return NextResponse.redirect(new URL(path + request.nextUrl.search, site), 308);
+  }
 
   // Lock down CORS/CSRF: state-changing requests must come from our own origin. No CORS headers are ever sent.
   if (isApi && request.method !== "GET" && request.method !== "HEAD" && !WEBHOOKS.includes(path)) {

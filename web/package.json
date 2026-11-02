@@ -9,10 +9,10 @@
     "lint": "eslint",
     "cron:ingest": "tsx --env-file=.env.local scripts/cron.ts ingest",
     "cron:notify": "tsx --env-file=.env.local scripts/cron.ts notify",
-    "telegram:webhook": "node --env-file=.env.local -e \"const u=(process.env.NEXT_PUBLIC_APP_URL||'').replace(/\\/+$/,'');fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/setWebhook?url=${u}/api/telegram/webhook&secret_token=${process.env.TELEGRAM_WEBHOOK_SECRET}`).then(r=>r.text()).then(console.log)\"",
     "cron:news": "tsx --env-file=.env.local scripts/news.ts",
     "test": "vitest run",
-    "telegram:dev": "tsx --env-file=.env.local scripts/telegram-dev.ts"
+    "telegram:dev": "tsx --env-file=.env.local scripts/telegram-dev.ts",
+    "telegram:webhook": "tsx --env-file=.env.local scripts/telegram-webhook.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.134.0",
