@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { featureTier } from "@/lib/pricing";
 import { FilterBar, type Filters } from "@/components/app/FilterBar";
 import { SaveButton } from "@/components/app/SaveButton";
 import { ButtonLink } from "@/components/ui/Button";
@@ -8,7 +7,7 @@ import { EmptyState } from "@/components/ui/Toast";
 import { jobFacets } from "@/lib/job-facets";
 import { filterRows, searchAllJobs, type JobRow } from "@/lib/job-search";
 import { MATCH_THRESHOLD } from "@/lib/matching";
-import { LIMITS, periodStart } from "@/lib/plan";
+import { LIMITS, getPlan } from "@/lib/plan";
 import { requireUser } from "@/lib/supabase/server";
 
 export const metadata = { title: "Matches" };
@@ -21,11 +20,10 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const f = await searchParams;
 
 
-  const [{ data: u }, { data: profile }, { data: alerts }, { data: sub }, { data: rows }, { data: tracked }, facets] = await Promise.all([
+  const [{ data: u }, { data: profile }, { data: alerts }, { data: rows }, { data: tracked }, facets] = await Promise.all([
     supabase.from("users").select("name, plan, telegram_chat_id").eq("id", user!.id).single(),
     supabase.from("profiles").select("skills, preferred_roles, locations, job_type").eq("user_id", user!.id).maybeSingle(),
     supabase.from("alert_settings").select("channels").eq("user_id", user!.id).maybeSingle(),
-    supabase.from("subscriptions").select("current_period_end").eq("user_id", user!.id).maybeSingle(),
     supabase
       .from("matches")
       .select("score, reasons, created_at, jobs(id, title, company, company_domain, location, remote, fresher_friendly, skills, posted_at, deadline, apply_url)")
@@ -36,8 +34,9 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
     supabase.from("applications").select("job_id, stage").eq("user_id", user!.id),
     jobFacets(),
   ]);
-  const plan = featureTier(u?.plan);
-  const { data: usage } = await supabase.from("usage").select("tailor_count").eq("user_id", user!.id).eq("period_start", periodStart(plan, sub?.current_period_end)).maybeSingle();
+  // Paid plan or an admin's Pro grant, and the same quota window the tailor route counts in (lib/plan.ts)
+  const { plan, period } = await getPlan(supabase, user!.id);
+  const { data: usage } = await supabase.from("usage").select("tailor_count").eq("user_id", user!.id).eq("period_start", period).maybeSingle();
   const savedIds = new Set((tracked ?? []).map((s) => s.job_id));
   const applied = (tracked ?? []).filter((t) => t.stage !== "saved").length;
   const tailorLeft = Math.max(0, LIMITS[plan].tailor - (usage?.tailor_count ?? 0));

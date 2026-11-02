@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import type { Branch } from "@/lib/skills";
-import { featureTier } from "@/lib/pricing";
+import { getPlan } from "@/lib/plan";
 import { ToastProvider } from "@/components/ui/Toast";
 import { Wordmark } from "@/components/ui/Wordmark";
 import { requireUser } from "@/lib/supabase/server";
@@ -44,7 +44,7 @@ export default async function Onboarding({ searchParams }: { searchParams: Promi
             channels: a?.channels ?? ["telegram"],
             alertHour: a?.alert_hour ?? 7,
             telegramConnected: !!u?.telegram_chat_id,
-            plan: featureTier(u?.plan),
+            plan: (await getPlan(supabase, user.id)).plan,
           }}
         />
       </main>

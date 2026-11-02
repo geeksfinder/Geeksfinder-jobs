@@ -1,13 +1,12 @@
 "use server";
 
 import { randomBytes } from "crypto";
-import { featureTier } from "@/lib/pricing";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { matchNow } from "@/lib/match-now";
 import { track } from "@/lib/events";
 import { MATCH_THRESHOLD } from "@/lib/matching";
-import { LIMITS } from "@/lib/plan";
+import { LIMITS, getPlan } from "@/lib/plan";
 import { rateLimit } from "@/lib/ratelimit";
 import { adminClient, requireUser } from "@/lib/supabase/server";
 import { botLink } from "@/lib/telegram";
@@ -60,8 +59,8 @@ export async function saveAlerts(input: z.input<typeof AlertsBody>): Promise<Res
   const { supabase, user } = await authed();
   const parsed = AlertsBody.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Pick how often and where." };
-  const { data: u } = await supabase.from("users").select("plan").eq("id", user.id).single();
-  const plan = featureTier(u?.plan);
+  // Daily alerts need Pro: the paid plan or an admin's Pro grant, read from the database
+  const { plan } = await getPlan(supabase, user.id);
   const { frequency, channels, alert_hour, quiet_start, quiet_end } = parsed.data;
   const { error } = await supabase
     .from("alert_settings")

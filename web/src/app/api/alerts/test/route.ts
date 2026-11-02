@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getFlag } from "@/lib/admin/flags";
-import { featureTier } from "@/lib/pricing";
+import { getPlan } from "@/lib/plan";
 import { alertEmailHtml, alertEmailSubject, canSendTestAlert, sendTelegramAlert, type AlertMatch } from "@/lib/alerts";
 import { sendEmail } from "@/lib/email";
 import { MATCH_THRESHOLD } from "@/lib/matching";
@@ -38,14 +38,16 @@ export async function POST(request: Request) {
   }
   if (!matches.length) return NextResponse.json({ error: "No jobs to show yet. Try again after the next morning run." }, { status: 409 });
 
+  // Paid plan or an admin's Pro grant, so a granted student's test alert has no upgrade note
+  const { plan } = await getPlan(supabase, user.id);
   const app = (process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin).replace(/\/+$/, "");
   try {
     let ok: boolean;
     if (body.channel === "telegram") {
-      ok = await sendTelegramAlert(u!.telegram_chat_id!, { name: u?.name, plan: featureTier(u?.plan), matches, app, test: true });
+      ok = await sendTelegramAlert(u!.telegram_chat_id!, { name: u?.name, plan, matches, app, test: true });
     } else {
       const unsub = unsubscribeUrl(app, user.id);
-      const html = alertEmailHtml(matches, { plan: featureTier(u?.plan), unsubscribeUrl: unsub, app, test: true });
+      const html = alertEmailHtml(matches, { plan, unsubscribeUrl: unsub, app, test: true });
       ok = await sendEmail(user.email!, alertEmailSubject(matches.length, true), html, { unsubscribeUrl: unsub });
     }
     if (!ok) return NextResponse.json({ error: body.channel === "telegram" ? "Telegram didn't accept the message. Press Start in the bot, then try again." : "The email didn't send. Try again in a few minutes." }, { status: 502 });

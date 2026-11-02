@@ -1,4 +1,5 @@
-import { LIMITS, periodStart } from "@/lib/plan";
+import { effectivePlan } from "@/lib/entitlement";
+import { LIMITS, getPlan } from "@/lib/plan";
 import { isPaidPlan, PLANS, planName, featureTier } from "@/lib/pricing";
 import { longDate, shortDate } from "@/lib/format";
 import { requireUser } from "@/lib/supabase/server";
@@ -15,8 +16,11 @@ export default async function Billing({ searchParams }: { searchParams: Promise<
     supabase.from("subscriptions").select("*").eq("user_id", user!.id).maybeSingle(),
     supabase.from("payments").select("id, amount, status, paid_at").eq("user_id", user!.id).order("paid_at", { ascending: false }).limit(12),
   ]);
+  // What they pay for drives this page; usage counts in the same window as the limits (paid plan or Pro grant)
   const plan = featureTier(u?.plan);
-  const { data: usage } = await supabase.from("usage").select("tailor_count, finder_count").eq("user_id", user!.id).eq("period_start", periodStart(plan, sub?.current_period_end)).maybeSingle();
+  const [{ plan: usePlan, period }, eff] = await Promise.all([getPlan(supabase, user!.id), effectivePlan(supabase, user!.id)]);
+  const granted = plan === "free" && usePlan === "pro" && eff.grantEndsAt;
+  const { data: usage } = await supabase.from("usage").select("tailor_count, finder_count").eq("user_id", user!.id).eq("period_start", period).maybeSingle();
   const active = !!sub?.status && ["authenticated", "active", "pending"].includes(sub.status);
   const inTrial = !!sub?.trial_end && new Date(sub.trial_end) > new Date();
   const nextDebit = inTrial ? sub?.trial_end : sub?.current_period_end;
@@ -30,6 +34,9 @@ export default async function Billing({ searchParams }: { searchParams: Promise<
       <section className="mt-6 panel p-5 md:p-6">
         <p className="text-small text-ink-2">Current plan</p>
         <p className="text-h2 font-semibold">{planName(u?.plan, sub?.plan_code)}{isPaidPlan(code) && plan === "pro" ? ` · ₹${bought.price} ${bought.every}` : ""}{plan === "pro" && inTrial && active ? " · free trial" : ""}</p>
+        {granted && (
+          <p className="mt-2 text-body text-ink-2">You have Hustle free until {longDate(eff.grantEndsAt)}: daily alerts, 10 tailored resumes and HR emails. Nothing is charged.</p>
+        )}
         {active && nextDebit && (
           <p className="mt-4 text-h3 font-semibold md:text-h2">
             Next debit <span className="tabular">₹{bought.price}</span> on {shortDate(nextDebit)}
@@ -40,9 +47,9 @@ export default async function Billing({ searchParams }: { searchParams: Promise<
           <p className="mt-2 text-body text-ink-2">Cancelled. Your plan stays active until {longDate(sub.current_period_end)}.</p>
         )}
         <p className="mt-4 text-small text-ink-2">
-          Tailored resumes used: <span className="tabular">{usage?.tailor_count ?? 0} of {LIMITS[plan].tailor}</span>
+          Tailored resumes used: <span className="tabular">{usage?.tailor_count ?? 0} of {LIMITS[usePlan].tailor}</span>
           {plan === "pro" ? " this 15-day cycle" : ""}
-          {plan === "pro" && <> · HR lookups: <span className="tabular">{usage?.finder_count ?? 0} of {LIMITS.pro.finder}</span></>}
+          {usePlan === "pro" && <> · HR lookups: <span className="tabular">{usage?.finder_count ?? 0} of {LIMITS.pro.finder}</span></>}
         </p>
       </section>
 

@@ -1,5 +1,5 @@
 import { ChevronDown, ExternalLink } from "lucide-react";
-import { featureTier } from "@/lib/pricing";
+import { getPlan } from "@/lib/plan";
 import { notFound } from "next/navigation";
 import { CompanyLogo } from "@/components/ui/CompanyLogo";
 import { Badge, SkillChip } from "@/components/ui/Highlighter";
@@ -20,8 +20,8 @@ export default async function ApplyPage({ params, searchParams }: { params: Prom
   const { tab } = await searchParams;
   if (!uuid.safeParse(id).success) notFound();
 
-  const [{ data: u }, { data: job }, { data: match }, { data: profile }] = await Promise.all([
-    supabase.from("users").select("plan").eq("id", user!.id).single(),
+  const [{ plan }, { data: job }, { data: match }, { data: profile }] = await Promise.all([
+    getPlan(supabase, user!.id),
     supabase.from("jobs").select("id, title, company, company_domain, location, remote, description, skills, fresher_friendly, apply_url, posted_at, deadline").eq("id", id).maybeSingle(),
     supabase.from("matches").select("score, reasons").eq("user_id", user!.id).eq("job_id", id).maybeSingle(),
     supabase.from("profiles").select("skills").eq("user_id", user!.id).maybeSingle(),
@@ -61,7 +61,7 @@ export default async function ApplyPage({ params, searchParams }: { params: Prom
         )}
       </header>
 
-      <JobActions jobId={job.id} applyUrl={job.apply_url} plan={featureTier(u?.plan)} initialTab={tab === "email" ? "email" : "tailor"} />
+      <JobActions jobId={job.id} applyUrl={job.apply_url} plan={plan} initialTab={tab === "email" ? "email" : "tailor"} />
 
       {blocks.length > 0 && (
         <details className="group mt-10 border-t border-line pt-6">

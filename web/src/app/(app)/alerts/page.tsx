@@ -1,5 +1,5 @@
 import { canSendTestAlert } from "@/lib/alerts";
-import { featureTier } from "@/lib/pricing";
+import { getPlan } from "@/lib/plan";
 import { requireUser } from "@/lib/supabase/server";
 import { AlertForm } from "./AlertForm";
 import { DeleteAccount } from "./DeleteAccount";
@@ -9,6 +9,8 @@ export const metadata = { title: "Alerts" };
 
 export default async function AlertsPage() {
   const { supabase, user } = await requireUser();
+  // Paid plan or an admin's Pro grant (lib/entitlement.ts), never users.plan alone
+  const { plan } = await getPlan(supabase, user!.id);
   const [{ data: u }, { data: a }] = await Promise.all([
     supabase.from("users").select("plan, telegram_chat_id").eq("id", user!.id).single(),
     supabase.from("alert_settings").select("frequency, channels, alert_hour, quiet_hours").eq("user_id", user!.id).maybeSingle(),
@@ -22,7 +24,7 @@ export default async function AlertsPage() {
       {canSendTestAlert(user!.created_at) && <TestAlert telegramConnected={!!u?.telegram_chat_id} email={user!.email ?? ""} />}
       <div id="alerts-form">
         <AlertForm
-          plan={featureTier(u?.plan)}
+          plan={plan}
           telegramConnected={!!u?.telegram_chat_id}
           initial={{
             frequency: a?.frequency ?? "weekly",
