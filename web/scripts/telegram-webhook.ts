@@ -21,3 +21,5 @@ async function main() {
   console.log(`Now pointing at: ${info.result?.url || "(none)"}${info.result?.last_error_message ? ` · last error: ${info.result.last_error_message}` : ""}`);
 }
 main();
+
+export {};
