@@ -95,3 +95,21 @@ export function alertEmailHtml(matches: AlertMatch[], o: { plan: string; unsubsc
     <p style="color:#7A8494;font-size:12px;margin-top:24px">Prefer Telegram? <a href="${o.app}/alerts" style="color:#7A8494">Connect it here</a> · <a href="${o.app}/alerts" style="color:#7A8494">Change frequency</a> · <a href="${o.unsubscribeUrl}" style="color:#7A8494">Unsubscribe from emails</a></p>
   </div>`;
 }
+
+/**
+ * Is a student's alert due now? Due once today's alert time (IST) has passed and it hasn't gone out since, so a
+ * scheduled run that starts late (GitHub often runs them 30–60 minutes late, or skips some) still delivers that
+ * day instead of skipping everyone whose hour it missed. Daily is Pro-only (free students get weekly); weekly goes
+ * on Mondays, monthly on the 1st. Never twice within 20 hours, so changing the alert time can't send a second one.
+ */
+export function alertDue(o: { frequency: string; plan: string; alertHour: number; lastSent: string | null; anyHour?: boolean }, now = Date.now()) {
+  const ist = new Date(now + 5.5 * 3_600_000);
+  const todayAlert = Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate(), o.alertHour) - 5.5 * 3_600_000;
+  const last = o.lastSent ? new Date(o.lastSent).getTime() : 0;
+  if (last && now - last < 20 * 3_600_000) return false;
+  if (!o.anyHour && (now < todayAlert || last >= todayAlert)) return false;
+  const effective = o.frequency === "daily" && o.plan !== "pro" ? "weekly" : o.frequency;
+  if (effective === "daily") return true;
+  if (effective === "weekly") return ist.getUTCDay() === 1;
+  return ist.getUTCDate() === 1;
+}

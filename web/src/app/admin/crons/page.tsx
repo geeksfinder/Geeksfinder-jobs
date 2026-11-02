@@ -14,8 +14,8 @@ type Run = { id: number; job: string; status: string; started_at: string; finish
 
 // The scheduled jobs (daily.yml) and when each runs, so a missed run is easy to spot
 const TASKS = [
-  { task: "ingest", label: "Job fetch", when: "6:00 IST daily" },
-  { task: "notify", label: "Alerts", when: "hourly, 5:30–22:30 IST" },
+  { task: "ingest", label: "Job fetch", when: "5:41 IST daily" },
+  { task: "notify", label: "Alerts", when: "hourly at :37, 5:37–22:37 IST" },
   { task: "news", label: "Blog drafts", when: "8:45 and 18:45 IST" },
   { task: "report", label: "Daily report", when: "21:45 IST" },
 ] as const;

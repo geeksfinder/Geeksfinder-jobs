@@ -34,3 +34,31 @@ describe("Telegram alert as one message", () => {
     expect(text).toMatch(/more in the app\./);
   });
 });
+
+describe("when an alert is due", () => {
+  // 2 Nov 2026 is a Monday. IST = UTC + 5:30.
+  const at = (h: number, m = 0, day = 2) => Date.UTC(2026, 10, day, h, m) - 5.5 * 3_600_000;
+  const pro = { frequency: "daily", plan: "pro", alertHour: 14, lastSent: null };
+  it("goes out on a late run after the alert time, not only inside that hour", async () => {
+    const { alertDue } = await import("@/lib/alerts");
+    expect(alertDue(pro, at(13, 59))).toBe(false);
+    expect(alertDue(pro, at(14, 30))).toBe(true);
+    expect(alertDue(pro, at(16, 41))).toBe(true);
+  });
+  it("goes out once a day", async () => {
+    const { alertDue } = await import("@/lib/alerts");
+    expect(alertDue({ ...pro, lastSent: new Date(at(14, 31)).toISOString() }, at(16, 41))).toBe(false);
+    expect(alertDue({ ...pro, lastSent: new Date(at(14, 31, 1)).toISOString() }, at(14, 40))).toBe(true);
+  });
+  it("never twice within 20 hours, even after the alert time is changed", async () => {
+    const { alertDue } = await import("@/lib/alerts");
+    expect(alertDue({ ...pro, alertHour: 20, lastSent: new Date(at(7, 30)).toISOString() }, at(20, 30))).toBe(false);
+  });
+  it("sends free students weekly on Mondays, monthly on the 1st", async () => {
+    const { alertDue } = await import("@/lib/alerts");
+    expect(alertDue({ ...pro, plan: "free" }, at(14, 30))).toBe(true);
+    expect(alertDue({ ...pro, plan: "free" }, at(14, 30, 3))).toBe(false);
+    expect(alertDue({ ...pro, frequency: "monthly" }, at(14, 30, 1))).toBe(true);
+    expect(alertDue({ ...pro, frequency: "monthly" }, at(14, 30))).toBe(false);
+  });
+});

@@ -4,8 +4,10 @@ on:
   schedule:
     # Times are UTC; IST = UTC + 5:30. (Public repo: Actions minutes are unlimited. As a private repo this schedule
     # used about 1,500 of the free 2,000 minutes a month.)
-    - cron: "30 0 * * *"      # 06:00 IST — fetch, dedupe, enrich, match (before the 7:30 alerts)
-    - cron: "0 0-17 * * *"    # hourly 05:30–22:30 IST — alerts for users whose alert time is now (alert hours are 5–22)
+    # Off the top of the hour: GitHub delays or drops scheduled runs most at :00. Runs can still be late, so alerts
+    # go to everyone whose alert time has passed today and who hasn't had one (lib/alerts.ts alertDue).
+    - cron: "11 0 * * *"      # 05:41 IST — fetch, dedupe, enrich, match (before the 7:30 alerts)
+    - cron: "7 0-17 * * *"    # hourly 05:37–22:37 IST — alerts for users whose alert time has passed today
     - cron: "15 3,13 * * *"   # 08:45 and 18:45 IST — news + guides → reviewed drafts (auto-published when every check passes)
     - cron: "15 16 * * *"     # 21:45 IST — daily report email to admins
   workflow_dispatch:
@@ -68,8 +70,8 @@ jobs:
         id: task
         run: |
           case "${{ github.event.schedule }}" in
-            "30 0 * * *")    echo "t=ingest" >> "$GITHUB_OUTPUT" ;;
-            "0 0-17 * * *")  echo "t=notify" >> "$GITHUB_OUTPUT" ;;
+            "11 0 * * *")    echo "t=ingest" >> "$GITHUB_OUTPUT" ;;
+            "7 0-17 * * *")  echo "t=notify" >> "$GITHUB_OUTPUT" ;;
             "15 3,13 * * *") echo "t=news"   >> "$GITHUB_OUTPUT" ;;
             "15 16 * * *")   echo "t=report" >> "$GITHUB_OUTPUT" ;;
             *)              echo "t=${{ inputs.task }}" >> "$GITHUB_OUTPUT" ;;

@@ -31,7 +31,7 @@ import { likelyBranch, type Branch } from "@/lib/skills";
 import { adminClient } from "@/lib/supabase/admin";
 import { esc, sendTelegram } from "@/lib/telegram";
 import { unsubscribeUrl } from "@/lib/unsubscribe";
-import { alertEmailHtml, alertEmailSubject, sendTelegramAlert, type AlertMatch } from "@/lib/alerts";
+import { alertDue, alertEmailHtml, alertEmailSubject, sendTelegramAlert, type AlertMatch } from "@/lib/alerts";
 
 /**
  * Unattended runs must survive network blips: retry dropped connections, 429 and 5xx up to 3 times with backoff.
@@ -671,18 +671,6 @@ async function match() {
   return { matched: saved };
 }
 
-/** Hourly run at :30 IST. Due when it's the user's alert hour and the frequency matches. */
-function isDue(frequency: string, plan: string, alertHour: number, lastSent: string | null) {
-  const now = new Date(Date.now() + 5.5 * 3_600_000); // IST clock
-  if (now.getUTCHours() !== alertHour && process.env.NOTIFY_ANY_HOUR !== "1") return false;
-  const effective = frequency === "daily" && plan !== "pro" ? "weekly" : frequency; // daily is Pro-only
-  const sentRecently = lastSent && Date.now() - new Date(lastSent).getTime() < 20 * 3_600_000;
-  if (sentRecently) return false;
-  if (effective === "daily") return true;
-  if (effective === "weekly") return now.getUTCDay() === 1; // Monday
-  return now.getUTCDate() === 1;
-}
-
 function inQuietHours(range: string | null) {
   const m = /\[(\d+),(\d+)\)/.exec(range ?? "");
   if (!m) return false;
@@ -715,7 +703,7 @@ async function notify(ctx: CronContext) {
     // Disabled accounts get nothing
     if (!raw || raw.disabled_at) return false;
     const u = { ...raw, plan: tier(resolvePlan(raw.plan, grants.get(s.user_id) ?? [])) };
-    if (!isDue(s.frequency, u.plan, s.alert_hour ?? 7, s.last_sent_at) || inQuietHours(s.quiet_hours as string | null)) return false;
+    if (!alertDue({ frequency: s.frequency, plan: u.plan, alertHour: s.alert_hour ?? 7, lastSent: s.last_sent_at, anyHour: process.env.NOTIFY_ANY_HOUR === "1" }) || inQuietHours(s.quiet_hours as string | null)) return false;
 
     const limit = u.plan === "pro" ? 10 : 5;
     // Strong matches only, and never a job hidden after reports
